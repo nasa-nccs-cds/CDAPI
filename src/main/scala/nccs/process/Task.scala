@@ -7,7 +7,6 @@ import scala.xml._
 import mutable.ListBuffer
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import nccs.process.exceptions._
 import nccs.utilities.numbers.GenericNumber
 
 case class ErrorReport(severity: String, message: String) {
@@ -36,14 +35,14 @@ class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val
       if ( !domainMap.contains(domid) ) {
         var keylist = domainMap.keys.mkString("[",",","]")
         logger.error( s"Error, No $domid in $keylist in variable $vid" )
-        throw new NotAcceptableException( s"Error, Missing domain $domid in variable $vid" )
+        throw new Exception( s"Error, Missing domain $domid in variable $vid" )
       }
     }
     for (workflow <- workflows; operation <- workflow.operations; opid = operation.id; var_arg <- operation.inputs) {
       if (!variableMap.contains(var_arg)) {
         var keylist = variableMap.keys.mkString("[", ",", "]")
         logger.error(s"Error, No $var_arg in $keylist in operation $opid")
-        throw new NotAcceptableException(s"Error, Missing variable $var_arg in operation $opid")
+        throw new Exception(s"Error, Missing variable $var_arg in operation $opid")
       }
     }
   }
@@ -182,7 +181,7 @@ object DataContainer extends ContainerBase {
       case e: Exception => {
         logger.error("Error creating DataContainer: " + e.getMessage  )
         logger.error( e.getStackTrace.mkString("\n") )
-        throw new NotAcceptableException( e.getMessage, e )
+        throw new Exception( e.getMessage, e )
       }
     }
   }
@@ -243,7 +242,7 @@ object DomainContainer extends ContainerBase {
       case e: Exception => {
         logger.error("Error creating DomainContainer: " + e.getMessage )
         logger.error( e.getStackTrace.mkString("\n") )
-        throw new NotAcceptableException( e.getMessage, e )
+        throw new Exception( e.getMessage, e )
       }
     }
   }
@@ -268,7 +267,7 @@ object WorkflowContainer extends ContainerBase {
       case e: Exception => {
         val msg = "Error creating WorkflowContainer: " + e.getMessage
         logger.error(msg)
-        throw new NotAcceptableException(msg)
+        throw new Exception(msg)
       }
     }
   }
