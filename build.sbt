@@ -1,4 +1,4 @@
-name := """cdas"""
+name := """esgfWpsApi"""
 
 organization := "nccs"
 
@@ -6,7 +6,7 @@ version := "1.0-SNAPSHOT"
 
 scalaVersion := "2.11.7"
 
-lazy val root = (project in file("."))
+lazy val root = project in file(".")
 
 ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
 
