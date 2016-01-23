@@ -22,7 +22,7 @@ case class ErrorReport(severity: String, message: String) {
 class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val variableMap : Map[String,Any], val domainMap: Map[String,DomainContainer] ) {
   val errorReports = new ListBuffer[ErrorReport]()
   val logger = LoggerFactory.getLogger( classOf[TaskRequest] )
-  validate()
+  validate
 //  logger.info( s"TaskRequest: name= $name, workflows= " + workflows.toString + ", variableMap= " + variableMap.toString + ", domainMap= " + domainMap.toString )
 
   def addErrorReport(severity: String, message: String) = {
@@ -31,15 +31,15 @@ class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val
     errorReports += error_rep
   }
 
-  def validate(): Unit = {
-    for( variable <- inputVariables; domid = variable.domain; vid=variable.id; if !domid.isEmpty ) {
+  def validate = {
+    for( variable <- inputVariables; domid = variable.domain; vid=variable.name; if !domid.isEmpty ) {
       if ( !domainMap.contains(domid) ) {
         var keylist = domainMap.keys.mkString("[",",","]")
         logger.error( s"Error, No $domid in $keylist in variable $vid" )
         throw new Exception( s"Error, Missing domain $domid in variable $vid" )
       }
     }
-    for (workflow <- workflows; operation <- workflow.operations; opid = operation.id; var_arg <- operation.inputs) {
+    for (workflow <- workflows; operation <- workflow.operations; opid = operation.name; var_arg <- operation.inputs) {
       if (!variableMap.contains(var_arg)) {
         var keylist = variableMap.keys.mkString("[", ",", "]")
         logger.error(s"Error, No $var_arg in $keylist in operation $opid")
@@ -79,10 +79,11 @@ class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val
 }
 
 object TaskRequest {
+  val logger = LoggerFactory.getLogger( classOf[TaskRequest] )
   def apply(process_name: String, datainputs: Map[String, Seq[Map[String, Any]]]) = {
     val data_list = datainputs.getOrElse("variable", List()).map(DataContainer(_)).toList
     val domain_list = datainputs.getOrElse("domain", List()).map(DomainContainer(_)).toList
-    val operation_list = datainputs.getOrElse("operation", List()).map(WorkflowContainer(_)).toList
+    val operation_list = datainputs.getOrElse("operation", List()).map(WorkflowContainer(process_name,_)).toList
     val variableMap = buildVarMap( data_list, operation_list )
     val domainMap = buildDomainMap( domain_list )
     new TaskRequest( process_name, operation_list, variableMap, domainMap )
@@ -92,13 +93,17 @@ object TaskRequest {
     var var_items = new ListBuffer[(String,Any)]()
     for( data_container <- data ) var_items += ( data_container.uid -> data_container )
     for( workflow_container<- workflow; operation<-workflow_container.operations; if !operation.result.isEmpty ) var_items += ( operation.result -> operation )
-    var_items.toMap[String,Any]
+    val var_map = var_items.toMap[String,Any]
+    logger.info( "Created Variable Map: " + var_map.toString )
+    var_map
   }
 
   def buildDomainMap( domain: List[DomainContainer] ): Map[String,DomainContainer] = {
     var domain_items = new ListBuffer[(String,DomainContainer)]()
-    for( domain_container <- domain ) domain_items += ( domain_container.id -> domain_container )
-    domain_items.toMap[String,DomainContainer]
+    for( domain_container <- domain ) domain_items += ( domain_container.name -> domain_container )
+    val domain_map = domain_items.toMap[String,DomainContainer]
+    logger.info( "Created Domain Map: " + domain_map.toString )
+    domain_map
   }
 }
 
@@ -160,47 +165,53 @@ object containerTest extends App {
 }
 
 
-class DataContainer(val id: String, val dset: String, val domain: String) extends ContainerBase {
+class DataContainer(val uid: String, val name: String, val collection: String, val domain: String) extends ContainerBase {
   override def toString = {
-    s"DataContainer { id = $id, dset = $dset, domain = $domain }"
+    s"DataContainer { uid = $uid, name = $name, collection = $collection, domain = $domain }"
   }
 
-  override def toXml() = {
-      <dataset id={id} dset={dset.toString} domain={domain.toString}/>
+  override def toXml = {
+      <dataset uid={uid} name={name} collection={collection.toString} domain={domain.toString}/>
   }
-  def uid(): String = id.split(':').last
 }
 
 object DataContainer extends ContainerBase {
   def apply(metadata: Map[String, Any]): DataContainer = {
     try {
-      val dset = filterMap(metadata, key_equals("dset"))
-      val id = filterMap(metadata, key_equals("id"))
+      val uri = filterMap(metadata, key_equals("uri"))
+      val fullname = filterMap(metadata, key_equals("name"))
       val domain = filterMap(metadata, key_equals("domain"))
-      new DataContainer(normalize(id.toString), normalize(dset.toString), normalize(domain.toString) )
+      val name_items = fullname.toString.split(':')
+      val collection = parseUri( uri.toString )
+      new DataContainer(normalize(name_items.last), normalize(name_items.head), normalize(collection), normalize(domain.toString) )
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         logger.error("Error creating DataContainer: " + e.getMessage  )
         logger.error( e.getStackTrace.mkString("\n") )
         throw new Exception( e.getMessage, e )
-      }
     }
+  }
+  def parseUri( uri: String ): String = {
+    val uri_parts = uri.split("://")
+    val url_type = normalize( uri_parts.head )
+    if( ( url_type == "collection" ) && ( uri_parts.length == 2 ) ) uri_parts.last
+    else throw new Exception( "Unrecognized uri format: " + uri + ", type = " + uri_parts.head + ", nparts = " + uri_parts.length.toString + ", value = " + uri_parts.last )
   }
 }
 
-class DomainContainer( val id: String, val axes: List[DomainAxis] ) extends ContainerBase {
+class DomainContainer( val name: String, val axes: List[DomainAxis] ) extends ContainerBase {
   override def toString = {
-    s"DomainContainer { id = $id, axes = $axes }"
+    s"DomainContainer { name = $name, axes = $axes }"
   }
   override def toXml = {
-    <domain id={id}>
+    <domain name={name}>
       <axes> { axes.map( _.toXml ) } </axes>
     </domain>
   }
 }
 
 object DomainAxis extends ContainerBase {
-  def apply( id: String, axis_spec: Any ): Option[DomainAxis] = {
+  def apply( name: String, axis_spec: Any ): Option[DomainAxis] = {
     axis_spec match {
       case generic_axis_map: Map[_,_] =>
         val axis_map = getStringKeyMap( generic_axis_map )
@@ -208,7 +219,7 @@ object DomainAxis extends ContainerBase {
         val end = getGenericNumber( axis_map.get("end") )
         val system = getStringValue( axis_map.get("system") )
         val bounds = getStringValue( axis_map.get("bounds") )
-        new Some( new DomainAxis( normalize(id), start, end, system, bounds ) )
+        new Some( new DomainAxis( normalize(name), start, end, system, bounds ) )
       case None => None
       case _ =>
         val msg = "Unrecognized DomainAxis spec: " + axis_spec.getClass.toString
@@ -218,14 +229,14 @@ object DomainAxis extends ContainerBase {
   }
 }
 
-class DomainAxis( val d_id: String, val d_start: GenericNumber, val d_end: GenericNumber, val d_system: String, val d_bounds: String ) extends ContainerBase  {
+class DomainAxis( val name: String, val start: GenericNumber, val end: GenericNumber, val system: String, val bounds: String ) extends ContainerBase  {
 
   override def toString = {
-    s"DomainAxis { id = $d_id, start = $d_start, end = $d_end, system = $d_system, bounds = $d_bounds }"
+    s"DomainAxis { name = $name, start = $start, end = $end, system = $system, bounds = $bounds }"
   }
 
   override def toXml = {
-    <axis id={d_id} start={d_start.toString} end={d_end.toString} system={d_system} bounds={d_bounds} />
+    <axis name={name} start={start.toString} end={end.toString} system={system} bounds={bounds} />
   }
 }
 
@@ -233,18 +244,17 @@ object DomainContainer extends ContainerBase {
   def apply(metadata: Map[String, Any]): DomainContainer = {
     var items = new ListBuffer[ Option[DomainAxis] ]()
     try {
-      val id = filterMap(metadata, key_equals("id"))
+      val name = filterMap(metadata, key_equals("name"))
       items += DomainAxis("lat", filterMap(metadata, key_equals( """lat*""".r)))
       items += DomainAxis("lon", filterMap(metadata, key_equals( """lon*""".r)))
       items += DomainAxis("lev", filterMap(metadata, key_equals( """lev*""".r)))
       items += DomainAxis("time", filterMap(metadata, key_equals( """tim*""".r)))
-      new DomainContainer( normalize(id.toString), items.flatten.toList )
+      new DomainContainer( normalize(name.toString), items.flatten.toList )
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         logger.error("Error creating DomainContainer: " + e.getMessage )
         logger.error( e.getStackTrace.mkString("\n") )
         throw new Exception( e.getMessage, e )
-      }
     }
   }
 }
@@ -259,34 +269,33 @@ class WorkflowContainer(val operations: Iterable[OperationContainer]) extends Co
 }
 
 object WorkflowContainer extends ContainerBase {
-  def apply(metadata: Map[String, Any]): WorkflowContainer = {
+  def apply(process_name: String, metadata: Map[String, Any]): WorkflowContainer = {
     try {
       import nccs.utilities.wpsOperationParser
       val parsed_data_inputs = wpsOperationParser.parseOp(metadata("unparsed").toString)
-      new WorkflowContainer(parsed_data_inputs.map(OperationContainer(_)))
+      new WorkflowContainer( parsed_data_inputs.map(OperationContainer(process_name,_)))
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         val msg = "Error creating WorkflowContainer: " + e.getMessage
         logger.error(msg)
         throw new Exception(msg)
-      }
     }
   }
 }
 
-class OperationContainer(val id: String, val name: String, val result: String = "", val inputs: List[String], val optargs: Map[String,String])  extends ContainerBase {
+class OperationContainer(val identifier: String, val name: String, val result: String = "", val inputs: List[String], val optargs: Map[String,String])  extends ContainerBase {
   override def toString = {
-    s"OperationContainer { id = $id,  name = $name, result = $result, inputs = $inputs, optargs = $optargs }"
+    s"OperationContainer { id = $identifier,  name = $name, result = $result, inputs = $inputs, optargs = $optargs }"
   }
-  override def toXml() = {
-    <proc id={id} name={name} result={result} inputs={inputs.toString} optargs={optargs.toString}/>
+  override def toXml = {
+    <proc id={identifier} name={name} result={result} inputs={inputs.toString} optargs={optargs.toString}/>
   }
 }
 
 object OperationContainer extends ContainerBase {
-  def apply(raw_metadata: Any): OperationContainer = {
+  def apply(process_name: String, raw_metadata: Any): OperationContainer = {
     raw_metadata match {
-      case (id: String, args: List[_]) => {
+      case (ident: String, args: List[_]) =>
         val varlist = new ListBuffer[String]()
         val optargs = new ListBuffer[(String,String)]()
         for( raw_arg<-args; arg=raw_arg.toString ) {
@@ -296,22 +305,22 @@ object OperationContainer extends ContainerBase {
           }
           else varlist += arg
         }
-        val ids = id.split("~")
+        val ids = ident.split("~")
         ids.length match {
-          case 1 => new OperationContainer( id = id, name="$PROCESSNAME", result = ids(0), inputs = varlist.toList, optargs=optargs.toMap[String,String] )
-          case 2 => new OperationContainer( id = id, name = ids(0), result = ids(1), inputs = varlist.toList, optargs=optargs.toMap[String,String] )
-          case _ => {
-            val msg = "Unrecognized format for Operation id: " + id
+          case 1 => new OperationContainer( identifier = ident, name=process_name, result = ids(0), inputs = varlist.toList, optargs=optargs.toMap[String,String] )
+          case 2 =>
+            val op_name = if( ids(0).nonEmpty ) ids(0) else process_name
+            val identifier = if( ids(0).nonEmpty ) ident else process_name + ident
+            new OperationContainer( identifier = identifier, name = op_name, result = ids(1), inputs = varlist.toList, optargs=optargs.toMap[String,String] )
+          case _ =>
+            val msg = "Unrecognized format for Operation id: " + ident
             logger.error(msg)
             throw new Exception(msg)
-          }
         }
-      }
-      case _ => {
+      case _ =>
         val msg = "Unrecognized format for OperationContainer: " + raw_metadata.toString
         logger.error(msg)
         throw new Exception(msg)
-      }
     }
   }
 }
