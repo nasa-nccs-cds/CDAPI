@@ -22,7 +22,7 @@ case class ErrorReport(severity: String, message: String) {
 class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val variableMap : Map[String,DataContainer], val domainMap: Map[String,DomainContainer] ) {
   val errorReports = new ListBuffer[ErrorReport]()
   val logger = LoggerFactory.getLogger( classOf[TaskRequest] )
-  validate
+  validate()
 //  logger.info( s"TaskRequest: name= $name, workflows= " + workflows.toString + ", variableMap= " + variableMap.toString + ", domainMap= " + domainMap.toString )
 
   def addErrorReport(severity: String, message: String) = {
@@ -31,8 +31,8 @@ class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val
     errorReports += error_rep
   }
 
-  def validate = {
-    for( variable <- inputVariables; domid = variable.domain; vid=variable.name; if !domid.isEmpty ) {
+  def validate() = {
+    for( variable <- inputVariables; if variable.isSource; domid = variable.getSource.domain; vid=variable.getSource.name; if !domid.isEmpty ) {
       if ( !domainMap.contains(domid) ) {
         var keylist = domainMap.keys.mkString("[",",","]")
         logger.error( s"Error, No $domid in $keylist in variable $vid" )
@@ -73,7 +73,7 @@ class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val
     </task_request>
   }
 
-  def inputVariables(): Traversable[DataContainer] = {
+  def inputVariables: Traversable[DataContainer] = {
     for( variableSource <- variableMap.values; if variableSource.isInstanceOf[ DataContainer ] ) yield variableSource.asInstanceOf[DataContainer]
   }
 }
@@ -164,15 +164,23 @@ object containerTest extends App {
   println( fv )
 }
 
+class DataSource( val name: String, val collection: String, val domain: String ) {
+  override def toString =  s"DataSource { name = $name, collection = $collection, domain = $domain }"
+  def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
+}
 
-class DataContainer(val uid: String, val name: String = "", val collection: String = "", val domain: String = "", val operation : Option[OperationContainer] = None ) extends ContainerBase {
+class DataContainer(val uid: String, val source : Option[DataSource] = None, val operation : Option[OperationContainer] = None ) extends ContainerBase {
+  assert( source.isDefined || operation.isDefined, "Empty DataContainer: variable uid = $uid" )
   override def toString = {
-    s"DataContainer { uid = $uid, name = $name, collection = $collection, domain = $domain }"
+    val embedded_val: String = if ( source.isDefined ) source.get.toString else operation.get.toString
+    s"DataContainer ( $uid ) { $embedded_val }"
   }
-
   override def toXml = {
-      <dataset uid={uid} name={name} collection={collection.toString} domain={domain.toString}/>
+    val embedded_xml = if ( source.isDefined ) source.get.toXml else operation.get.toXml
+    <dataset uid={uid}> embedded_xml </dataset>
   }
+  def isSource = source.isDefined
+  def getSource = source.get
 }
 
 object DataContainer extends ContainerBase {
@@ -186,7 +194,8 @@ object DataContainer extends ContainerBase {
       val domain = filterMap(metadata, key_equals("domain"))
       val name_items = fullname.toString.split(':')
       val collection = parseUri( uri.toString )
-      new DataContainer(normalize(name_items.last), normalize(name_items.head), normalize(collection), normalize(domain.toString) )
+      val dsource = new DataSource( normalize(name_items.head), normalize(collection), normalize(domain.toString) )
+      new DataContainer(normalize(name_items.last), source = Some(dsource) )
     } catch {
       case e: Exception =>
         logger.error("Error creating DataContainer: " + e.getMessage  )
