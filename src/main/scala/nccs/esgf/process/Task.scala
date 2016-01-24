@@ -19,7 +19,7 @@ case class ErrorReport(severity: String, message: String) {
   }
 }
 
-class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val variableMap : Map[String,Any], val domainMap: Map[String,DomainContainer] ) {
+class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val variableMap : Map[String,DataContainer], val domainMap: Map[String,DomainContainer] ) {
   val errorReports = new ListBuffer[ErrorReport]()
   val logger = LoggerFactory.getLogger( classOf[TaskRequest] )
   validate
@@ -89,11 +89,11 @@ object TaskRequest {
     new TaskRequest( process_name, operation_list, variableMap, domainMap )
   }
 
-  def buildVarMap( data: List[DataContainer], workflow: List[WorkflowContainer] ): Map[String,Any] = {
-    var var_items = new ListBuffer[(String,Any)]()
+  def buildVarMap( data: List[DataContainer], workflow: List[WorkflowContainer] ): Map[String,DataContainer] = {
+    var var_items = new ListBuffer[(String,DataContainer)]()
     for( data_container <- data ) var_items += ( data_container.uid -> data_container )
-    for( workflow_container<- workflow; operation<-workflow_container.operations; if !operation.result.isEmpty ) var_items += ( operation.result -> operation )
-    val var_map = var_items.toMap[String,Any]
+    for( workflow_container<- workflow; operation<-workflow_container.operations; if !operation.result.isEmpty ) var_items += ( operation.result -> DataContainer(operation) )
+    val var_map = var_items.toMap[String,DataContainer]
     logger.info( "Created Variable Map: " + var_map.toString )
     var_map
   }
@@ -165,7 +165,7 @@ object containerTest extends App {
 }
 
 
-class DataContainer(val uid: String, val name: String, val collection: String, val domain: String) extends ContainerBase {
+class DataContainer(val uid: String, val name: String = "", val collection: String = "", val domain: String = "", val operation : Option[OperationContainer] = None ) extends ContainerBase {
   override def toString = {
     s"DataContainer { uid = $uid, name = $name, collection = $collection, domain = $domain }"
   }
@@ -176,6 +176,9 @@ class DataContainer(val uid: String, val name: String, val collection: String, v
 }
 
 object DataContainer extends ContainerBase {
+  def apply( operation: OperationContainer ): DataContainer = {
+      new DataContainer( uid=operation.result, operation=Some(operation) )
+  }
   def apply(metadata: Map[String, Any]): DataContainer = {
     try {
       val uri = filterMap(metadata, key_equals("uri"))
