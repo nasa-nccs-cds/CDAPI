@@ -56,8 +56,8 @@
       <file leaf-file-name="Task.scala" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.45638946">
-              <caret line="188" column="78" selection-start-line="188" selection-start-column="78" selection-end-line="188" selection-end-column="78" />
+            <state vertical-scroll-proportion="0.47160244">
+              <caret line="189" column="17" selection-start-line="189" selection-start-column="17" selection-end-line="189" selection-end-column="17" />
               <folding>
                 <element signature="e#27#59#0" expanded="true" />
               </folding>
@@ -714,7 +714,13 @@
       <option name="project" value="LOCAL" />
       <updated>1453598032275</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="add type checks for DataContainer">
+      <created>1453598450951</created>
+      <option name="number" value="00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1453598450951</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="ToolWindowManager">
@@ -765,7 +771,8 @@
     <MESSAGE value="Update api names." />
     <MESSAGE value="Update api." />
     <MESSAGE value="Update api" />
-    <option name="LAST_COMMIT_MESSAGE" value="Update api" />
+    <MESSAGE value="add type checks for DataContainer" />
+    <option name="LAST_COMMIT_MESSAGE" value="add type checks for DataContainer" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager />
@@ -1066,8 +1073,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.45638946">
-          <caret line="188" column="78" selection-start-line="188" selection-start-column="78" selection-end-line="188" selection-end-column="78" />
+        <state vertical-scroll-proportion="0.47160244">
+          <caret line="189" column="17" selection-start-line="189" selection-start-column="17" selection-end-line="189" selection-end-column="17" />
           <folding>
             <element signature="e#27#59#0" expanded="true" />
           </folding>

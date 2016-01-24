@@ -182,11 +182,11 @@ class DataContainer(val uid: String, val source : Option[DataSource] = None, val
   def isSource = source.isDefined
   def isOperation = operation.isDefined
   def getSource = {
-    assert( isSource, "Attempt to access an operation based DataContainer as a data source")
+    assert( isSource, s"Attempt to access an operation based DataContainer($uid) as a data source")
     source.get
   }
   def getOperation = {
-    assert( isOperation, "Attempt to access a source based DataContainer as an operation")
+    assert( isOperation, s"Attempt to access a source based DataContainer($uid) as an operation")
     operation.get
   }
 }
