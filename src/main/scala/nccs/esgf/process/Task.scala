@@ -169,8 +169,9 @@ class DataSource( val name: String, val collection: String, val domain: String )
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
 }
 
-class DataContainer(val uid: String, val source : Option[DataSource] = None, val operation : Option[OperationContainer] = None ) extends ContainerBase {
+class DataContainer(val uid: String, private val source : Option[DataSource] = None, private val operation : Option[OperationContainer] = None ) extends ContainerBase {
   assert( source.isDefined || operation.isDefined, "Empty DataContainer: variable uid = $uid" )
+  assert( source.isEmpty || operation.isEmpty, "Conflicted DataContainer: variable uid = $uid" )
   override def toString = {
     val embedded_val: String = if ( source.isDefined ) source.get.toString else operation.get.toString
     s"DataContainer ( $uid ) { $embedded_val }"
@@ -231,6 +232,9 @@ class DomainContainer( val name: String, val axes: List[DomainAxis] ) extends Co
 }
 
 object DomainAxis extends ContainerBase {
+  def apply( name: String, start: Int, end: Int ): Option[DomainAxis] = {
+    Some( new DomainAxis( normalize(name), start, end, "indices" ) )
+  }
   def apply( name: String, axis_spec: Any ): Option[DomainAxis] = {
     axis_spec match {
       case generic_axis_map: Map[_,_] =>
@@ -239,7 +243,7 @@ object DomainAxis extends ContainerBase {
         val end = getGenericNumber( axis_map.get("end") )
         val system = getStringValue( axis_map.get("system") )
         val bounds = getStringValue( axis_map.get("bounds") )
-        new Some( new DomainAxis( normalize(name), start, end, system, bounds ) )
+        Some( new DomainAxis( normalize(name), start, end, system, bounds ) )
       case None => None
       case _ =>
         val msg = "Unrecognized DomainAxis spec: " + axis_spec.getClass.toString
@@ -249,7 +253,7 @@ object DomainAxis extends ContainerBase {
   }
 }
 
-class DomainAxis( val name: String, val start: GenericNumber, val end: GenericNumber, val system: String, val bounds: String ) extends ContainerBase  {
+class DomainAxis( val name: String, val start: GenericNumber, val end: GenericNumber, val system: String, val bounds: String = "" ) extends ContainerBase  {
 
   override def toString = {
     s"DomainAxis { name = $name, start = $start, end = $end, system = $system, bounds = $bounds }"
