@@ -180,7 +180,15 @@ class DataContainer(val uid: String, val source : Option[DataSource] = None, val
     <dataset uid={uid}> embedded_xml </dataset>
   }
   def isSource = source.isDefined
-  def getSource = source.get
+  def isOperation = operation.isDefined
+  def getSource = {
+    assert( isSource, "Attempt to access an operation based DataContainer as a data source")
+    source.get
+  }
+  def getOperation = {
+    assert( isOperation, "Attempt to access a source based DataContainer as an operation")
+    operation.get
+  }
 }
 
 object DataContainer extends ContainerBase {
