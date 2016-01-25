@@ -8,6 +8,7 @@ import mutable.ListBuffer
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import nccs.esgf.utilities.numbers.GenericNumber
+import nccs.esgf.utilities.wpsNameMatchers
 
 case class ErrorReport(severity: String, message: String) {
   override def toString = {
@@ -235,6 +236,9 @@ object DomainAxis extends ContainerBase {
   def apply( name: String, dimension: Char, start: Int, end: Int ): Option[DomainAxis] = {
     Some( new DomainAxis( normalize(name), dimension, start, end, "indices" ) )
   }
+  def apply( name: String, start: Int, end: Int ): Option[DomainAxis] = {
+    Some( new DomainAxis( normalize(name), wpsNameMatchers.getDimension(name), start, end, "indices" ) )
+  }
   def apply( name: String, dimension: Char, axis_spec: Any ): Option[DomainAxis] = {
     axis_spec match {
       case generic_axis_map: Map[_,_] =>
@@ -269,10 +273,10 @@ object DomainContainer extends ContainerBase {
     var items = new ListBuffer[ Option[DomainAxis] ]()
     try {
       val name = filterMap(metadata, key_equals("name"))
-      items += DomainAxis("lat",  'y', filterMap(metadata,  key_equals( """lat*|y*""".r) ))
-      items += DomainAxis("lon",  'x', filterMap(metadata,  key_equals( """lon*|x*""".r)))
-      items += DomainAxis("lev",  'z', filterMap(metadata,  key_equals( """lev*|z*""".r)))
-      items += DomainAxis("time", 't', filterMap(metadata,  key_equals( """t*""".r)))
+      items += DomainAxis("lat",  'y', filterMap(metadata,  key_equals( wpsNameMatchers.yAxis )))
+      items += DomainAxis("lon",  'x', filterMap(metadata,  key_equals( wpsNameMatchers.xAxis )))
+      items += DomainAxis("lev",  'z', filterMap(metadata,  key_equals( wpsNameMatchers.zAxis )))
+      items += DomainAxis("time", 't', filterMap(metadata,  key_equals( wpsNameMatchers.tAxis )))
       new DomainContainer( normalize(name.toString), items.flatten.toList )
     } catch {
       case e: Exception =>
@@ -295,7 +299,7 @@ class WorkflowContainer(val operations: Iterable[OperationContainer]) extends Co
 object WorkflowContainer extends ContainerBase {
   def apply(process_name: String, metadata: Map[String, Any]): WorkflowContainer = {
     try {
-      import nccs.utilities.wpsOperationParser
+      import nccs.esgf.utilities.wpsOperationParser
       val parsed_data_inputs = wpsOperationParser.parseOp(metadata("unparsed").toString)
       new WorkflowContainer( parsed_data_inputs.map(OperationContainer(process_name,_)))
     } catch {

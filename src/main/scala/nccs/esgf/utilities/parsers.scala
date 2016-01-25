@@ -1,4 +1,4 @@
-package nccs.utilities
+package nccs.esgf.utilities
 
 import scala.util.parsing.combinator._
 
@@ -28,5 +28,28 @@ object testOperationParser extends App {
   val parsed_input = wpsOperationParser.parseOp( input )
   println( parsed_input.toString )
 }
+
+object wpsNameMatchers {
+  val yAxis = """^lat\w*|^y\w*""".r
+  val xAxis = """^lon\w*|^x\w*""".r
+  val zAxis = """^lev\w*|^z\w*|^plev\w*""".r
+  val tAxis = """^t\w*""".r
+
+  def getDimension( axisName: String ): Char = axisName match {
+    case xAxis() => 'x'
+    case yAxis() => 'y'
+    case zAxis() => 'z'
+    case tAxis() => 't'
+    case _ => throw new Exception( "Unrecognized axis name: " + axisName )
+  }
+}
+
+object wpsNameMatchNest extends App {
+  val axis_name = "xdim"
+  val dimension = wpsNameMatchers.getDimension( axis_name )
+  println( "Result = " + dimension )
+}
+
+
 
 
