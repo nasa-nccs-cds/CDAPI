@@ -3,7 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="3000555a-ea99-4bec-8468-15f5d74968b4" name="Default" comment="">
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/main/scala/nccs/esgf/utilities/numbers.scala" afterPath="$PROJECT_DIR$/src/main/scala/nccs/esgf/utilities/numbers.scala" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala" afterPath="$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala" />
     </list>
     <ignored path="esgfWpsApi.iws" />
     <ignored path=".idea/workspace.xml" />
@@ -53,11 +53,11 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="Task.scala" pinned="false" current-in-tab="false">
+      <file leaf-file-name="Task.scala" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="-5.4074073">
-              <caret line="268" column="30" selection-start-line="268" selection-start-column="20" selection-end-line="268" selection-end-column="30" />
+            <state vertical-scroll-proportion="0.3326572">
+              <caret line="262" column="51" selection-start-line="262" selection-start-column="51" selection-end-line="262" selection-end-column="51" />
               <folding>
                 <element signature="e#27#59#0" expanded="true" />
               </folding>
@@ -65,10 +65,10 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="numbers.scala" pinned="false" current-in-tab="true">
+      <file leaf-file-name="numbers.scala" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/utilities/numbers.scala">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.3474827">
+            <state vertical-scroll-proportion="0.0">
               <caret line="41" column="2" selection-start-line="41" selection-start-column="2" selection-end-line="41" selection-end-column="2" />
               <folding />
             </state>
@@ -131,14 +131,14 @@
         <option value="$PROJECT_DIR$/src/main/scala/nccs/engine/manager.scala" />
         <option value="$PROJECT_DIR$/build.sbt" />
         <option value="$PROJECT_DIR$/src/main/scala/nccs/esgf/engine/manager.scala" />
-        <option value="$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala" />
         <option value="$PROJECT_DIR$/src/main/scala/nccs/esgf/utilities/numbers.scala" />
+        <option value="$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="131" />
-    <option name="y" value="51" />
+    <option name="x" value="134" />
+    <option name="y" value="23" />
     <option name="width" value="1750" />
     <option name="height" value="1337" />
   </component>
@@ -738,11 +738,17 @@
       <option name="project" value="LOCAL" />
       <updated>1453663509793</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="Improve GenericNumber">
+      <created>1453674274764</created>
+      <option name="number" value="00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1453674274764</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="ToolWindowManager">
-    <frame x="131" y="51" width="1750" height="1337" extended-state="0" />
+    <frame x="134" y="23" width="1750" height="1337" extended-state="0" />
     <editor active="true" />
     <layout>
       <window_info id="Palette" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
@@ -791,7 +797,8 @@
     <MESSAGE value="Update api" />
     <MESSAGE value="add type checks for DataContainer" />
     <MESSAGE value="Update API" />
-    <option name="LAST_COMMIT_MESSAGE" value="Update API" />
+    <MESSAGE value="Improve GenericNumber" />
+    <option name="LAST_COMMIT_MESSAGE" value="Improve GenericNumber" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager />
@@ -1082,21 +1089,21 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala">
+    <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/utilities/numbers.scala">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="-5.4074073">
-          <caret line="268" column="30" selection-start-line="268" selection-start-column="20" selection-end-line="268" selection-end-column="30" />
-          <folding>
-            <element signature="e#27#59#0" expanded="true" />
-          </folding>
+        <state vertical-scroll-proportion="0.0">
+          <caret line="41" column="2" selection-start-line="41" selection-start-column="2" selection-end-line="41" selection-end-column="2" />
+          <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/utilities/numbers.scala">
+    <entry file="file://$PROJECT_DIR$/src/main/scala/nccs/esgf/process/Task.scala">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.3474827">
-          <caret line="41" column="2" selection-start-line="41" selection-start-column="2" selection-end-line="41" selection-end-column="2" />
-          <folding />
+        <state vertical-scroll-proportion="0.3326572">
+          <caret line="262" column="51" selection-start-line="262" selection-start-column="51" selection-end-line="262" selection-end-column="51" />
+          <folding>
+            <element signature="e#27#59#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
