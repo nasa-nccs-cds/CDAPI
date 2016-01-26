@@ -20,7 +20,7 @@ case class ErrorReport(severity: String, message: String) {
   }
 }
 
-class TaskRequest(val name: String,  val workflows: List[WorkflowContainer], val variableMap : Map[String,DataContainer], val domainMap: Map[String,DomainContainer] ) {
+class TaskRequest(val name: String, val variableMap : Map[String,DataContainer], val domainMap: Map[String,DomainContainer], val workflows: List[WorkflowContainer] = List() ) {
   val errorReports = new ListBuffer[ErrorReport]()
   val logger = LoggerFactory.getLogger( classOf[TaskRequest] )
   validate()
@@ -87,7 +87,7 @@ object TaskRequest {
     val operation_list = datainputs.getOrElse("operation", List()).map(WorkflowContainer(process_name,_)).toList
     val variableMap = buildVarMap( data_list, operation_list )
     val domainMap = buildDomainMap( domain_list )
-    new TaskRequest( process_name, operation_list, variableMap, domainMap )
+    new TaskRequest( process_name, variableMap, domainMap, operation_list )
   }
 
   def buildVarMap( data: List[DataContainer], workflow: List[WorkflowContainer] ): Map[String,DataContainer] = {
@@ -287,7 +287,7 @@ object DomainContainer extends ContainerBase {
   }
 }
 
-class WorkflowContainer(val operations: Iterable[OperationContainer]) extends ContainerBase {
+class WorkflowContainer(val operations: Iterable[OperationContainer] = List() ) extends ContainerBase {
   override def toString = {
     s"WorkflowContainer { operations = $operations }"
   }
