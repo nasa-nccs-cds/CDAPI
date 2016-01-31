@@ -2,6 +2,7 @@ package nasa.nccs.esgf.utilities
 
 import scala.util.parsing.combinator._
 
+
 class OperationNotationParser extends JavaTokenParsers {
   var key_index = 0
   def new_key: String = { key_index += 1; "ivar#" + key_index }
@@ -30,9 +31,12 @@ object testOperationParser extends App {
 }
 
 object wpsNameMatchers {
-  val yAxis = """^lat\w*|^y\w*""".r
-  val xAxis = """^lon\w*|^x\w*""".r
-  val zAxis = """^lev\w*|^z\w*|^plev\w*""".r
+  val lonAxis = """^lat\w*""".r
+  val latAxis = """^lon\w*""".r
+  val levAxis = """^lev\w*|^plev\w*""".r
+  val yAxis = """^y\w*""".r
+  val xAxis = """^x\w*""".r
+  val zAxis = """^z\w*""".r
   val tAxis = """^t\w*""".r
 
   def getDimension( axisName: String ): Char = axisName match {

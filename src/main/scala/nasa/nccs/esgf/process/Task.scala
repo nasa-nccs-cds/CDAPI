@@ -233,13 +233,13 @@ class DomainContainer( val name: String, val axes: List[DomainAxis] ) extends Co
 }
 
 object DomainAxis extends ContainerBase {
-  def apply( name: String, dimension: Char, start: Int, end: Int ): Option[DomainAxis] = {
-    Some( new DomainAxis( normalize(name), dimension, start, end, "indices" ) )
+  object Type extends Enumeration { val Lat, Lon, Lev, X, Y, Z, T = Value }
+
+  def apply( axistype: Type.Value, start: Int, end: Int ): Option[DomainAxis] = {
+    Some( new DomainAxis(  axistype, start, end, "indices" ) )
   }
-  def apply( name: String, start: Int, end: Int ): Option[DomainAxis] = {
-    Some( new DomainAxis( normalize(name), wpsNameMatchers.getDimension(name), start, end, "indices" ) )
-  }
-  def apply( name: String, dimension: Char, axis_spec: Any ): Option[DomainAxis] = {
+
+  def apply( axistype: Type.Value, axis_spec: Any ): Option[DomainAxis] = {
     axis_spec match {
       case generic_axis_map: Map[_,_] =>
         val axis_map = getStringKeyMap( generic_axis_map )
@@ -247,7 +247,7 @@ object DomainAxis extends ContainerBase {
         val end = getGenericNumber( axis_map.get("end") )
         val system = getStringValue( axis_map.get("system") )
         val bounds = getStringValue( axis_map.get("bounds") )
-        Some( new DomainAxis( normalize(name), dimension, start, end, system, bounds ) )
+        Some( new DomainAxis( axistype, start, end, system, bounds ) )
       case None => None
       case _ =>
         val msg = "Unrecognized DomainAxis spec: " + axis_spec.getClass.toString
@@ -257,26 +257,31 @@ object DomainAxis extends ContainerBase {
   }
 }
 
-class DomainAxis( val name: String, val dimension: Char, val start: GenericNumber, val end: GenericNumber, val system: String, val bounds: String = "" ) extends ContainerBase  {
+class DomainAxis( val axistype: DomainAxis.Type.Value, val start: GenericNumber, val end: GenericNumber, val system: String, val bounds: String = "" ) extends ContainerBase  {
+  val name =   axistype.toString
 
   override def toString = {
-    s"DomainAxis { name = $name, dimension = $dimension, start = $start, end = $end, system = $system, bounds = $bounds }"
+    s"DomainAxis { name = $name, start = $start, end = $end, system = $system, bounds = $bounds }"
   }
 
   override def toXml = {
-    <axis name={name} dimension={dimension.toString} start={start.toString} end={end.toString} system={system} bounds={bounds} />
+    <axis name={name} start={start.toString} end={end.toString} system={system} bounds={bounds} />
   }
 }
 
 object DomainContainer extends ContainerBase {
+  
   def apply(metadata: Map[String, Any]): DomainContainer = {
     var items = new ListBuffer[ Option[DomainAxis] ]()
     try {
       val name = filterMap(metadata, key_equals("name"))
-      items += DomainAxis("lat",  'y', filterMap(metadata,  key_equals( wpsNameMatchers.yAxis )))
-      items += DomainAxis("lon",  'x', filterMap(metadata,  key_equals( wpsNameMatchers.xAxis )))
-      items += DomainAxis("lev",  'z', filterMap(metadata,  key_equals( wpsNameMatchers.zAxis )))
-      items += DomainAxis("time", 't', filterMap(metadata,  key_equals( wpsNameMatchers.tAxis )))
+      items += DomainAxis( DomainAxis.Type.Lat, filterMap(metadata,  key_equals( wpsNameMatchers.latAxis )))
+      items += DomainAxis( DomainAxis.Type.Lon, filterMap(metadata,  key_equals( wpsNameMatchers.lonAxis )))
+      items += DomainAxis( DomainAxis.Type.Lev, filterMap(metadata,  key_equals( wpsNameMatchers.levAxis )))
+      items += DomainAxis( DomainAxis.Type.Y,   filterMap(metadata,  key_equals( wpsNameMatchers.yAxis )))
+      items += DomainAxis( DomainAxis.Type.X,   filterMap(metadata,  key_equals( wpsNameMatchers.xAxis )))
+      items += DomainAxis( DomainAxis.Type.Z,   filterMap(metadata,  key_equals( wpsNameMatchers.zAxis )))
+      items += DomainAxis( DomainAxis.Type.T,   filterMap(metadata,  key_equals( wpsNameMatchers.tAxis )))
       new DomainContainer( normalize(name.toString), items.flatten.toList )
     } catch {
       case e: Exception =>
@@ -355,5 +360,13 @@ object OperationContainer extends ContainerBase {
 
 
 class TaskProcessor {
+
+}
+
+object enumTest extends App {
+  object Type extends Enumeration { val Lat, Lon, Lev, X, Y, Z, T = Value }
+
+  val strType = Type.Lat.toString
+  println( strType )
 
 }
