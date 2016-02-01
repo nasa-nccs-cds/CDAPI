@@ -12,8 +12,9 @@ object GenericNumber {
   implicit def gen2int( gennum: GenericNumber ): Int = { gennum.toInt }
   implicit def gen2float( gennum: GenericNumber ): Float = { gennum.toFloat }
   implicit def gen2double( gennum: GenericNumber ): Double = { gennum.toDouble }
+  implicit def gen2string( gennum: GenericNumber ): String = { gennum.toString }
 
-  def fromString(sx: String): GenericNumber = {
+  def parse(sx: String): GenericNumber = {
     try {
       new IntNumber(sx.toInt)
     } catch {
@@ -30,8 +31,8 @@ object GenericNumber {
       case fx: Float =>   new FloatNumber(fx)
       case dx: Double =>  new DoubleNumber(dx)
       case sx: Short =>   new ShortNumber(sx)
+      case stx: String => new StringNumber(stx)
       case None =>        new UndefinedNumber()
-      case sx: String =>  fromString( sx )
       case x =>           throw new IllegalNumberException(x)
     }
   }
@@ -45,6 +46,14 @@ abstract class GenericNumber {
   def toInt: Int
   def toFloat: Float
   def toDouble: Double
+}
+
+class StringNumber( val numvalue: String ) extends GenericNumber {
+  type NumericType = String
+  override def value: NumericType = numvalue
+  override def toInt: Int = value.toInt
+  override def toFloat: Float = { value.toFloat }
+  override def toDouble: Double = { value.toDouble }
 }
 
 class IntNumber( val numvalue: Int ) extends GenericNumber {
