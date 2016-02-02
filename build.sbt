@@ -1,6 +1,6 @@
 name := """esgfWpsApi"""
 
-organization := "nccs"
+organization := "nasa.nccs"
 
 version := "1.0-SNAPSHOT"
 
