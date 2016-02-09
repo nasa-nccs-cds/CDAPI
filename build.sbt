@@ -1,4 +1,4 @@
-name := """esgfWpsApi"""
+name := """CDAPI"""
 
 organization := "nasa.nccs"
 
@@ -13,5 +13,7 @@ ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
 // resolvers ++= Seq( "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases" )
 
 libraryDependencies ++= Dependencies.scala
+
+libraryDependencies ++= Dependencies.ndarray
 
     
