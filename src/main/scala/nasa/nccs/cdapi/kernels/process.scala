@@ -58,6 +58,7 @@ abstract class DataFragment( array: AbstractTensor )  extends Serializable {
 
 }
 
+
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
   val identifiers = this.getClass.getName.split('$').flatMap( _.split('.') )
