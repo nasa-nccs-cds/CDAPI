@@ -39,7 +39,7 @@ object GenericNumber {
 }
 
 abstract class GenericNumber {
-  val logger = LoggerFactory.getLogger( classOf[GenericNumber] )
+  val logger = LoggerFactory.getLogger( this.getClass )
   type NumericType
   def value: NumericType
   override def toString = value.toString

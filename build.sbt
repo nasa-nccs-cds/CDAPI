@@ -14,6 +14,5 @@ ivyScala := ivyScala.value map { _.copy(overrideScalaVersion = true) }
 
 libraryDependencies ++= Dependencies.scala
 
-libraryDependencies ++= Dependencies.ndarray
 
     

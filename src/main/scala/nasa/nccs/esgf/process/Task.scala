@@ -22,7 +22,7 @@ case class ErrorReport(severity: String, message: String) {
 
 class TaskRequest(val name: String, val variableMap : Map[String,DataContainer], val domainMap: Map[String,DomainContainer], val workflows: List[WorkflowContainer] = List() ) {
   val errorReports = new ListBuffer[ErrorReport]()
-  val logger = LoggerFactory.getLogger( classOf[TaskRequest] )
+  val logger = LoggerFactory.getLogger( this.getClass )
   validate()
 //  logger.info( s"TaskRequest: name= $name, workflows= " + workflows.toString + ", variableMap= " + variableMap.toString + ", domainMap= " + domainMap.toString )
 
@@ -80,7 +80,7 @@ class TaskRequest(val name: String, val variableMap : Map[String,DataContainer],
 }
 
 object TaskRequest {
-  val logger = LoggerFactory.getLogger( classOf[TaskRequest] )
+  val logger = LoggerFactory.getLogger( this.getClass )
   def apply(process_name: String, datainputs: Map[String, Seq[Map[String, Any]]]) = {
     val data_list = datainputs.getOrElse("variable", List()).map(DataContainer(_)).toList
     val domain_list = datainputs.getOrElse("domain", List()).map(DomainContainer(_)).toList
@@ -109,7 +109,7 @@ object TaskRequest {
 }
 
 class ContainerBase {
-  val logger = LoggerFactory.getLogger( classOf[ContainerBase] )
+  val logger = LoggerFactory.getLogger( this.getClass )
   def item_key(map_item: (String, Any)): String = map_item._1
 
   def normalize(sval: String): String = sval.stripPrefix("\"").stripSuffix("\"").toLowerCase

@@ -3,7 +3,7 @@ import nasa.nccs.esgf.process.TaskRequest
 import org.slf4j.LoggerFactory
 
 abstract class PluginExecutionManager {
-  val logger = LoggerFactory.getLogger( classOf[PluginExecutionManager] )
+  val logger = LoggerFactory.getLogger( this.getClass )
 
   def execute( process_name: String, datainputs: Map[String, Seq[Map[String, Any]]], run_args: Map[String,Any] ): xml.Elem
 

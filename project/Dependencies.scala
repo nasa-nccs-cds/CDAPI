@@ -16,7 +16,7 @@ object Library {
   val slf4jApi       = "org.slf4j"         %  "slf4j-api"       % Version.slf4j
   val scalaxml       = "org.scala-lang.modules" %% "scala-xml" % "1.0.3"
   val scalaparser    = "org.scala-lang.modules" %% "scala-parser-combinators" % "1.0.3"
-
+  val breezeMath     = "org.scalanlp"      %% "breeze-math_2.10" %  "0.4"
   val nd4s           = "org.nd4j"           % "nd4s_2.11"       % "0.4-rc3.8"
   val nd4j           =  "org.nd4j"          % "nd4j-x86"        % "0.4-rc3.8"
 }
@@ -26,7 +26,7 @@ object Dependencies {
 
   val scala = Seq( logbackClassic, slf4jApi, scalaxml, scalaparser )
 
-  val ndarray = Seq( nd4s, nd4j )
+  val ndarray = Seq( nd4s, nd4j, breezeMath )
 }
 
 

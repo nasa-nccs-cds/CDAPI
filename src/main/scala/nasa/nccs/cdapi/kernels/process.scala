@@ -1,5 +1,5 @@
 package nasa.nccs.cdapi.kernels
-// import nasa.nccs.utilities.cdsutils
+import nasa.nccs.cdapi.tensors.AbstractTensor
 import org.slf4j.LoggerFactory
 
 object Port {
@@ -42,10 +42,9 @@ class SingleInputExecutionResult( val operation: String, manifest: ResultManifes
     </operation>
 }
 
-abstract class DataFragment {
-  import org.nd4j.linalg.api.ndarray.INDArray
+abstract class DataFragment  extends Serializable {
 
-  def data(): INDArray
+  def data(): AbstractTensor
 
   def shape: List[Int]
 
@@ -53,7 +52,7 @@ abstract class DataFragment {
 
 
 abstract class Kernel {
-  val logger = LoggerFactory.getLogger(classOf[Kernel])
+  val logger = LoggerFactory.getLogger(this.getClass)
   val identifiers = this.getClass.getName.split('$').flatMap( _.split('.') )
   def operation: String = identifiers.last
   def module = identifiers.dropRight(1).mkString(".")
