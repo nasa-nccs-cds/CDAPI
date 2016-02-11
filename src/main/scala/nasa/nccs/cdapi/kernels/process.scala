@@ -2,6 +2,8 @@ package nasa.nccs.cdapi.kernels
 import nasa.nccs.cdapi.tensors.AbstractTensor
 import org.slf4j.LoggerFactory
 
+import scala.collection.mutable
+
 object Port {
   def apply( name: String, cardinality: String, description: String="", datatype: String="", identifier: String="" ) = {
     new Port(  name,  cardinality,  description, datatype,  identifier )
@@ -42,14 +44,19 @@ class SingleInputExecutionResult( val operation: String, manifest: ResultManifes
     </operation>
 }
 
-abstract class DataFragment  extends Serializable {
+abstract class DataFragment( array: AbstractTensor )  extends Serializable {
+  val metaData = new mutable.HashMap[String, String]
 
-  def data(): AbstractTensor
+  def this( array: AbstractTensor, metaDataVar: (String, String)* ) {
+    this( array )
+    metaDataVar.map(p => metaData += p)
+  }
 
-  def shape: List[Int]
+  def data: AbstractTensor = array
+  def name = array.name
+  def shape: List[Int] = array.shape.toList
 
 }
-
 
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
