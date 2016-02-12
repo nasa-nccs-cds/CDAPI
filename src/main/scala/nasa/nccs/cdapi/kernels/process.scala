@@ -62,7 +62,7 @@ abstract class DataFragment( array: AbstractTensor )  extends Serializable {
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
   val identifiers = this.getClass.getName.split('$').flatMap( _.split('.') )
-  def operation: String = identifiers.last
+  def operation: String = identifiers.last.toLowerCase
   def module = identifiers.dropRight(1).mkString(".")
   def id   = identifiers.mkString(".")
   def name = identifiers.takeRight(2).mkString(".")
@@ -88,20 +88,23 @@ abstract class Kernel {
 }
 
 class KernelModule {
+  val logger = LoggerFactory.getLogger(this.getClass)
   val identifiers = this.getClass.getName.split('$').flatMap( _.split('.') )
+  logger.info( "---> new KernelModule: " + identifiers.mkString(", ") )
   def package_path = identifiers.dropRight(1).mkString(".")
   def name: String = identifiers.last
   val version = ""
   val organization = ""
   val author = ""
   val contact = ""
-  val kernelMap: Map[String,Kernel] = Map(getKernelObjects.map( kernel => kernel.name -> kernel ): _*)
+  val kernelMap: Map[String,Kernel] = Map(getKernelObjects.map( kernel => kernel.operation -> kernel ): _*)
 
   def getKernelClasses = getInnerClasses.filter( _.getSuperclass.getName.split('.').last == "Kernel"  )
   def getInnerClasses = this.getClass.getClasses.toList
   def getKernelObjects = getKernelClasses.map( _.getDeclaredConstructors()(0).newInstance(this).asInstanceOf[Kernel] )
 
   def getKernel( kernelName: String ): Option[Kernel] = kernelMap.get( kernelName )
+  def getKernelNames: List[String] = kernelMap.keys.toList
 
   def toXml = {
     <kernelModule name={name}>
