@@ -13,13 +13,13 @@ trait AbstractTensor extends Serializable with SliceableArray {
 
   def zeros(shape: Int*): T
 
-  def map(f: Double => Double): AbstractTensor
+  def map(f: Float => Float): AbstractTensor
 
   /**
    * Indexed Operations
    */
 
-  def put(value: Double, shape: Int*): Unit
+  def put(value: Float, shape: Int*): Unit
 
   /**
    * Element-wise Operations
@@ -41,20 +41,21 @@ trait AbstractTensor extends Serializable with SliceableArray {
 
   def **(array: AbstractTensor): T
   
-  def div(num: Double): T
+  def div(num: Float): T
 
   /**
    * Masking operations
    */
 
-  def <=(num: Double): T
-  def :=(num: Double): T
+  def <=(num: Float): T
+  def :=(num: Float): T
 
   /**
    * Utility Methods
    */
 
-  def cumsum: Double
+  def cumsum: Float
+  def mean: Float
   def toString: String
 
   override def equals(any: Any): Boolean = {
@@ -77,8 +78,8 @@ trait AbstractTensor extends Serializable with SliceableArray {
    *  in case we know its entries are all non-negative.
    */
   def isZeroShortcut: Boolean
-  def max: Double
-  def min: Double
+  def max: Float
+  def min: Float
   def dup(): T
 
 }
