@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory
 /**
  * An abstract tensor
  */
-trait AbstractTensor extends Serializable with SliceableArray {
+trait AbstractTensor  extends Serializable with SliceableArray {
 
   type T <: AbstractTensor
   val name: String
@@ -13,7 +13,7 @@ trait AbstractTensor extends Serializable with SliceableArray {
 
   def zeros(shape: Int*): T
 
-  def map(f: Float => Float): AbstractTensor
+  def map(f: Double => Double): AbstractTensor
 
   /**
    * Indexed Operations

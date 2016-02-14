@@ -13,10 +13,10 @@ trait SliceableArray {
 
   def shape: Array[Int]
 
-  def data: Array[Double]
+  def data: Array[Float]
 
   def apply(ranges: (Int, Int)*): T
 
-  def apply(indexes: Int*): Double
+  def apply(indexes: Int*): Float
 
 }
