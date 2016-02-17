@@ -58,6 +58,7 @@ abstract class DataFragment( array: AbstractTensor )  extends Serializable {
 
 }
 
+trait AxisSpecs
 
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
@@ -74,7 +75,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute(inputSubsets: List[DataFragment], run_args: Map[String, Any]): ExecutionResult
+  def execute( inputSubsets: List[DataFragment], axisSpecs: AxisSpecs ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {
