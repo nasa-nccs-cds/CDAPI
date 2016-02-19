@@ -3,6 +3,7 @@ package nasa.nccs.esgf.process
 import scala.util.matching.Regex
 import scala.collection.mutable
 import scala.collection.immutable
+import scala.collection.mutable.HashSet
 import scala.xml._
 import mutable.ListBuffer
 import org.slf4j.Logger
@@ -96,6 +97,10 @@ object TaskRequest {
     for( workflow_container<- workflow; operation<-workflow_container.operations; if !operation.result.isEmpty ) var_items += ( operation.result -> DataContainer(operation) )
     val var_map = var_items.toMap[String,DataContainer]
     logger.info( "Created Variable Map: " + var_map.toString )
+    for( workflow_container<- workflow; operation<-workflow_container.operations; vid<-operation.inputs  ) var_map.get( vid ) match {
+      case Some(data_container) => data_container.addOpSpec( operation.optargs )
+      case None => throw new Exception( "Unrecognized variable %s in varlist [%s]".format( vid, var_map.keys.mkString(",") ) )
+    }
     var_map
   }
 
@@ -173,6 +178,7 @@ class DataSource( val name: String, val collection: String, val domain: String )
 class DataContainer(val uid: String, private val source : Option[DataSource] = None, private val operation : Option[OperationContainer] = None ) extends ContainerBase {
   assert( source.isDefined || operation.isDefined, "Empty DataContainer: variable uid = $uid" )
   assert( source.isEmpty || operation.isEmpty, "Conflicted DataContainer: variable uid = $uid" )
+  val optSpecs = mutable.HashMap[String,HashSet[String]]()
   override def toString = {
     val embedded_val: String = if ( source.isDefined ) source.get.toString else operation.get.toString
     s"DataContainer ( $uid ) { $embedded_val }"
@@ -190,6 +196,10 @@ class DataContainer(val uid: String, private val source : Option[DataSource] = N
   def getOperation = {
     assert( isOperation, s"Attempt to access a source based DataContainer($uid) as an operation")
     operation.get
+  }
+  def addOpSpec( optargs: Map[String,String] ): Unit = {
+    for ( (key,value) <- optargs ) { optSpecs}
+
   }
 }
 
