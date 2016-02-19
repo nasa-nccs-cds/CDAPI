@@ -19,14 +19,16 @@ object Library {
   val breezeMath     = "org.scalanlp"      %% "breeze-math_2.10" %  "0.4"
   val nd4s           = "org.nd4j"           % "nd4s_2.11"       % "0.4-rc3.8"
   val nd4j           =  "org.nd4j"          % "nd4j-x86"        % "0.4-rc3.8"
+  val joda           = "joda-time"          % "joda-time"       % "2.8.1"
+  val natty          = "com.joestelmach"    % "natty"           % "0.11"
 }
 
 object Dependencies {
   import Library._
 
-  val scala = Seq( logbackClassic, slf4jApi, scalaxml, scalaparser )
+  val scala = Seq( logbackClassic, slf4jApi, scalaxml, scalaparser, joda, natty  )
 
-  val ndarray = Seq( nd4s, nd4j, breezeMath )
+  val ndarray = Seq( nd4s, nd4j )
 }
 
 

@@ -1,5 +1,6 @@
 package nasa.nccs.cdapi.kernels
-import nasa.nccs.cdapi.tensors.AbstractTensor
+
+import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -44,15 +45,15 @@ class SingleInputExecutionResult( val operation: String, manifest: ResultManifes
     </operation>
 }
 
-abstract class DataFragment( array: AbstractTensor )  extends Serializable {
+abstract class DataFragment( array: Nd4jMaskedTensor )  extends Serializable {
   val metaData = new mutable.HashMap[String, String]
 
-  def this( array: AbstractTensor, metaDataVar: (String, String)* ) {
+  def this( array: Nd4jMaskedTensor, metaDataVar: (String, String)* ) {
     this( array )
     metaDataVar.map(p => metaData += p)
   }
 
-  def data: AbstractTensor = array
+  def data: Nd4jMaskedTensor = array
   def name = array.name
   def shape: List[Int] = array.shape.toList
 
@@ -75,7 +76,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute( inputSubsets: List[DataFragment], axisSpecs: AxisSpecs ): ExecutionResult
+  def execute( inputSubsets: List[DataFragment] ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {
