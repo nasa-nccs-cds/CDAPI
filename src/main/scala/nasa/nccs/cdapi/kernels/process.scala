@@ -1,6 +1,7 @@
 package nasa.nccs.cdapi.kernels
 
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
+import nasa.nccs.cdapi.cdm.PartitionedFragment
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -76,7 +77,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute( inputSubsets: List[DataFragment] ): ExecutionResult
+  def execute( inputSubsets: List[PartitionedFragment] ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {
