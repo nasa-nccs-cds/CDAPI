@@ -1,6 +1,6 @@
 package nasa.nccs.cdapi.cdm
 
-import nasa.nccs.cdapi.kernels.DataFragment
+import nasa.nccs.cdapi.kernels.{AxisSpecs, DataFragment}
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import nasa.nccs.esgf.utilities.numbers.GenericNumber
 import nasa.nccs.utilities.cdsutils
@@ -8,7 +8,7 @@ import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.indexing.{INDArrayIndex, NDArrayIndex}
 import ucar.nc2.time.{CalendarDate, CalendarDateRange}
-import nasa.nccs.esgf.process.DomainAxis
+import nasa.nccs.esgf.process.{OperationSpecs, DomainAxis}
 import ucar.{ma2, nc2}
 import ucar.nc2.dataset.{CoordinateAxis, CoordinateAxis1D, CoordinateSystem, CoordinateAxis1DTime}
 import scala.collection.JavaConversions._
@@ -140,7 +140,7 @@ class CDSVariable(val name: String, val dataset: CDSDataset, val ncVariable: nc2
     result
   }
 
-  def loadRoiPartition(roi: List[DomainAxis], partIndex: Int, partAxis: Char, nPart: Int, axisConf: Map[String,Any] ): PartitionedFragment = {
+  def loadRoiPartition(roi: List[DomainAxis], partIndex: Int, partAxis: String, nPart: Int, axisConf: List[OperationSpecs] ): PartitionedFragment = {
     dataset.getCoordinateAxis(partAxis) match {
       case Some(partitionAxis) =>
         val partAxisIndex = ncVariable.findDimensionIndex(partitionAxis.getShortName)
@@ -166,8 +166,8 @@ class CDSVariable(val name: String, val dataset: CDSDataset, val ncVariable: nc2
     }
   }
 
-  def getAxisIndex( axisClass: Char ): Option[Int] = {
-    def missing = { logger.warn( "Axis of type %c does not exist in variable %s".format( axisClass, fullname ) ); None }
+  def getAxisIndex( axisClass: String ): Option[Int] = {
+    def missing = { logger.warn( "Axis of type %s does not exist in variable %s".format( axisClass, fullname ) ); None }
     def getOption( ival: Int ) = ival match { case -1 => missing; case x => Option(x) }
     val coord_axes = dataset.getCoordinateAxes
     dataset.getCoordinateAxis( axisClass ) match {
@@ -176,12 +176,13 @@ class CDSVariable(val name: String, val dataset: CDSDataset, val ncVariable: nc2
     }
   }
 
-  def getAxisSpecs( axisConf: Map[String,Any] ): AxisSpecs = {
-    val axis_ids = axisConf.getOrElse("axes", "").toString.split(",").flatMap( sval => getAxisIndex( sval(0) ) )
-    new AxisSpecs( axis_ids )
+  def getAxisSpecs( axisConf: List[OperationSpecs] ): AxisSpecs = {
+    val axis_ids = mutable.HashSet[Int]()
+    for( opSpec <- axisConf ) axis_ids ++= opSpec.getSpec("axes").split(",").flatMap( sval => getAxisIndex( sval ) )
+    new AxisSpecs( axisIds=axis_ids.toSet )
   }
 
-  def loadRoi( roi: List[DomainAxis], axisConf: Map[String,Any] ): PartitionedFragment = {
+  def loadRoi( roi: List[DomainAxis], axisConf: List[OperationSpecs] ): PartitionedFragment = {
     val roiSection: ma2.Section = getSubSection(roi)
     findSubset(roiSection) match {
       case None =>
@@ -211,11 +212,6 @@ class CDSVariable(val name: String, val dataset: CDSDataset, val ncVariable: nc2
 
 object PartitionedFragment {
   def sectionToIndices( section: ma2.Section ): List[INDArrayIndex] = section.getRanges.map(range => NDArrayIndex.interval( range.first, range.last ) ).toList
-}
-
-class AxisSpecs( val axis_ids: Array[Int] = Array() ) {
-
-  def getAxes: Array[Int] = axis_ids
 }
 
 class PartitionedFragment( array: Nd4jMaskedTensor, val roiSection: ma2.Section, val axisSpecs: AxisSpecs, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {

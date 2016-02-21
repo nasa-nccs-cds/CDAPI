@@ -1,5 +1,7 @@
 package nasa.nccs.cdapi.cdm
 
+import java.nio.channels.NonReadableChannelException
+
 import nasa.nccs.esgf.process.DomainAxis
 import nasa.nccs.cdapi.cdm
 import ucar.nc2.constants.AxisType
@@ -34,6 +36,7 @@ object CDSDataset {
 
   private def loadNetCDFDataSet(url: String): NetcdfDataset = {
     NetcdfDataset.setUseNaNs(false)
+    logger.info("Opening NetCDF dataset %s".format(url))
     try {
       NetcdfDataset.openDataset(url)
     } catch {
@@ -82,14 +85,18 @@ class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDatase
       case DomainAxis.Type.T => Option( coordSystem.getTaxis )
     }
   }
-  def getCoordinateAxis( axisClass: Char ): Option[CoordinateAxis] = {
-    axisClass.toLower match {
-      case 'x' => if( coordSystem.isGeoXY ) Option( coordSystem.getXaxis ) else Option( coordSystem.getLonAxis )
-      case 'y' => if( coordSystem.isGeoXY ) Option( coordSystem.getYaxis ) else Option( coordSystem.getLatAxis )
-      case 'z' =>
-        if( coordSystem.containsAxisType( AxisType.Pressure ) ) Option( coordSystem.getPressureAxis )
-        else if( coordSystem.containsAxisType( AxisType.Height ) ) Option( coordSystem.getHeightAxis ) else  Option( coordSystem.getZaxis )
-      case 't' => Option( coordSystem.getTaxis )
+  def getCoordinateAxis( axisTypeStr: String ): Option[CoordinateAxis] = {
+    if (axisTypeStr.isEmpty) None
+    else {
+      axisTypeStr(0).toLower match {
+        case 'x' => if (coordSystem.isGeoXY) Option(coordSystem.getXaxis) else Option(coordSystem.getLonAxis)
+        case 'y' => if (coordSystem.isGeoXY) Option(coordSystem.getYaxis) else Option(coordSystem.getLatAxis)
+        case 'z' =>
+          if (coordSystem.containsAxisType(AxisType.Pressure)) Option(coordSystem.getPressureAxis)
+          else if (coordSystem.containsAxisType(AxisType.Height)) Option(coordSystem.getHeightAxis) else Option(coordSystem.getZaxis)
+        case 't' => Option(coordSystem.getTaxis)
+        case  x  => throw new Exception( "Can't recognize axis type '%c'".format(x) )
+      }
     }
   }
 }

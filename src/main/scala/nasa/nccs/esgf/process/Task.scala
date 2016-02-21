@@ -1,8 +1,7 @@
 package nasa.nccs.esgf.process
 
 import scala.util.matching.Regex
-import scala.collection.mutable
-import scala.collection.immutable
+import scala.collection.{mutable, immutable}
 import scala.collection.mutable.HashSet
 import scala.xml._
 import mutable.ListBuffer
@@ -83,6 +82,7 @@ class TaskRequest(val name: String, val variableMap : Map[String,DataContainer],
 object TaskRequest {
   val logger = LoggerFactory.getLogger( this.getClass )
   def apply(process_name: String, datainputs: Map[String, Seq[Map[String, Any]]]) = {
+    logger.info( "TaskRequest--> process_name: %s, datainputs: %s".format( process_name, datainputs.toString ) )
     val data_list = datainputs.getOrElse("variable", List()).map(DataContainer(_)).toList
     val domain_list = datainputs.getOrElse("domain", List()).map(DomainContainer(_)).toList
     val operation_list = datainputs.getOrElse("operation", List()).map(WorkflowContainer(process_name,_)).toList
@@ -98,7 +98,7 @@ object TaskRequest {
     val var_map = var_items.toMap[String,DataContainer]
     logger.info( "Created Variable Map: " + var_map.toString )
     for( workflow_container<- workflow; operation<-workflow_container.operations; vid<-operation.inputs  ) var_map.get( vid ) match {
-      case Some(data_container) => data_container.addOpSpec( operation.optargs )
+      case Some(data_container) => data_container.addOpSpec( operation )
       case None => throw new Exception( "Unrecognized variable %s in varlist [%s]".format( vid, var_map.keys.mkString(",") ) )
     }
     var_map
@@ -175,10 +175,22 @@ class DataSource( val name: String, val collection: String, val domain: String )
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
 }
 
+object OperationSpecs {
+  def apply( op: OperationContainer ) = new OperationSpecs( op.name, op.optargs )
+}
+class OperationSpecs( id: String, val optargs: Map[String,String] ) {
+  val ids = mutable.HashSet( id )
+  def ==( oSpec: OperationSpecs ) = ( optargs == oSpec.optargs )
+  def merge ( oSpec: OperationSpecs  ) = { ids ++= oSpec.ids }
+  def getSpec( id: String, default: String = "" ): String = optargs.getOrElse( id, default )
+}
+
+
 class DataContainer(val uid: String, private val source : Option[DataSource] = None, private val operation : Option[OperationContainer] = None ) extends ContainerBase {
   assert( source.isDefined || operation.isDefined, "Empty DataContainer: variable uid = $uid" )
   assert( source.isEmpty || operation.isEmpty, "Conflicted DataContainer: variable uid = $uid" )
-  val optSpecs = mutable.HashMap[String,HashSet[String]]()
+  private val optSpecs = mutable.ListBuffer[ OperationSpecs ]()
+
   override def toString = {
     val embedded_val: String = if ( source.isDefined ) source.get.toString else operation.get.toString
     s"DataContainer ( $uid ) { $embedded_val }"
@@ -197,10 +209,15 @@ class DataContainer(val uid: String, private val source : Option[DataSource] = N
     assert( isOperation, s"Attempt to access a source based DataContainer($uid) as an operation")
     operation.get
   }
-  def addOpSpec( optargs: Map[String,String] ): Unit = {
-    for ( (key,value) <- optargs ) { optSpecs}
 
+  def addOpSpec( operation: OperationContainer ): Unit = {
+    def mergeOpSpec( oSpecList: mutable.ListBuffer[ OperationSpecs ], oSpec: OperationSpecs ): Unit = oSpecList.headOption match {
+      case None => oSpecList += oSpec
+      case Some(head) => if( head == oSpec ) head merge oSpec else mergeOpSpec(oSpecList.tail,oSpec)
+    }
+    mergeOpSpec( optSpecs, OperationSpecs(operation) )
   }
+  def getOpSpecs: List[OperationSpecs] = optSpecs.toList
 }
 
 object DataContainer extends ContainerBase {

@@ -60,7 +60,11 @@ abstract class DataFragment( array: Nd4jMaskedTensor )  extends Serializable {
 
 }
 
-trait AxisSpecs
+
+class AxisSpecs( val axisIds: Set[Int] = Set.empty ) {
+
+}
+
 
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
