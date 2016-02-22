@@ -85,18 +85,16 @@ class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDatase
       case DomainAxis.Type.T => Option( coordSystem.getTaxis )
     }
   }
-  def getCoordinateAxis( axisTypeStr: String ): Option[CoordinateAxis] = {
-    if (axisTypeStr.isEmpty) None
-    else {
-      axisTypeStr(0).toLower match {
-        case 'x' => if (coordSystem.isGeoXY) Option(coordSystem.getXaxis) else Option(coordSystem.getLonAxis)
-        case 'y' => if (coordSystem.isGeoXY) Option(coordSystem.getYaxis) else Option(coordSystem.getLatAxis)
-        case 'z' =>
-          if (coordSystem.containsAxisType(AxisType.Pressure)) Option(coordSystem.getPressureAxis)
-          else if (coordSystem.containsAxisType(AxisType.Height)) Option(coordSystem.getHeightAxis) else Option(coordSystem.getZaxis)
-        case 't' => Option(coordSystem.getTaxis)
-        case  x  => throw new Exception( "Can't recognize axis type '%c'".format(x) )
-      }
+
+  def getCoordinateAxis(axisType: Char): CoordinateAxis = {
+    axisType match {
+      case 'x' => if (coordSystem.isGeoXY) coordSystem.getXaxis else coordSystem.getLonAxis
+      case 'y' => if (coordSystem.isGeoXY) coordSystem.getYaxis else coordSystem.getLatAxis
+      case 'z' =>
+        if (coordSystem.containsAxisType(AxisType.Pressure)) coordSystem.getPressureAxis
+        else if (coordSystem.containsAxisType(AxisType.Height)) coordSystem.getHeightAxis else coordSystem.getZaxis
+      case 't' => coordSystem.getTaxis
+      case x => throw new Exception("Can't recognize axis type '%c'".format(x))
     }
   }
 }

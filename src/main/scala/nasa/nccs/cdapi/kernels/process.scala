@@ -61,8 +61,8 @@ abstract class DataFragment( array: Nd4jMaskedTensor )  extends Serializable {
 }
 
 
-class AxisSpecs( val axisIds: Set[Int] = Set.empty ) {
-
+class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
+  def getAxes: Seq[Int] = axisIds.toSeq
 }
 
 

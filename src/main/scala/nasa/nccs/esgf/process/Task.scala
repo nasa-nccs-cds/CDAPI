@@ -360,12 +360,12 @@ object OperationContainer extends ContainerBase {
         val optargs = new ListBuffer[(String,String)]()
         for( raw_arg<-args; arg=raw_arg.toString ) {
           if(arg contains ":") {
-            val arg_items = arg.split(":")
+            val arg_items = arg.split(":").map( _.trim.toLowerCase )
             optargs += ( arg_items(0) -> arg_items(1) )
           }
-          else varlist += arg
+          else varlist += arg.trim.toLowerCase
         }
-        val ids = ident.split("~")
+        val ids = ident.split("~").map( _.trim.toLowerCase )
         ids.length match {
           case 1 => new OperationContainer( identifier = ident, name=process_name, result = ids(0), inputs = varlist.toList, optargs=optargs.toMap[String,String] )
           case 2 =>

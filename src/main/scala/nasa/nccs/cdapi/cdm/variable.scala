@@ -140,45 +140,41 @@ class CDSVariable(val name: String, val dataset: CDSDataset, val ncVariable: nc2
     result
   }
 
-  def loadRoiPartition(roi: List[DomainAxis], partIndex: Int, partAxis: String, nPart: Int, axisConf: List[OperationSpecs] ): PartitionedFragment = {
-    dataset.getCoordinateAxis(partAxis) match {
-      case Some(partitionAxis) =>
-        val partAxisIndex = ncVariable.findDimensionIndex(partitionAxis.getShortName)
-        assert(partAxisIndex != -1, "CDS2-CDSVariable: Can't find axis %s in variable %s".format(partitionAxis.getShortName, ncVariable.getNameAndDimensions))
-        val roiSection: ma2.Section = getSubSection(roi)
-        val sp = new SectionPartitioner( roiSection, nPart )
-        sp.getPartition(partIndex, partAxisIndex) match {
-          case Some(partSection) =>
-            findSubset(partSection) match {
-              case None =>
-                val array = ncVariable.read(partSection)
-                val ndArray: INDArray = getNDArray(array)
-                val axisSpecs = getAxisSpecs( axisConf )
-                addSubset( roiSection, new Nd4jMaskedTensor(ndArray), axisSpecs )
-              case Some(subset) =>
-                subset
-            }
+  def loadRoiPartition(roi: List[DomainAxis], partIndex: Int, partAxis: Char, nPart: Int, axisConf: List[OperationSpecs]): PartitionedFragment = {
+    val partitionAxis = dataset.getCoordinateAxis(partAxis)
+    val partAxisIndex = ncVariable.findDimensionIndex(partitionAxis.getShortName)
+    assert(partAxisIndex != -1, "CDS2-CDSVariable: Can't find axis %s in variable %s".format(partitionAxis.getShortName, ncVariable.getNameAndDimensions))
+    val roiSection: ma2.Section = getSubSection(roi)
+    val sp = new SectionPartitioner(roiSection, nPart)
+    sp.getPartition(partIndex, partAxisIndex) match {
+      case Some(partSection) =>
+        findSubset(partSection) match {
           case None =>
-            logger.warn( "No fragment generated for partition index %s out of %d parts".format( partIndex, nPart ) )
-            new PartitionedFragment()
+            val array = ncVariable.read(partSection)
+            val ndArray: INDArray = getNDArray(array)
+            val axisSpecs = getAxisSpecs(axisConf)
+            addSubset(roiSection, new Nd4jMaskedTensor(ndArray), axisSpecs)
+          case Some(subset) =>
+            subset
         }
-      case None => throw new IllegalStateException("CDS2-CDSVariable: Can't find coord axis type %c in variable %s".format(partAxis, ncVariable.getNameAndDimensions))
+      case None =>
+        logger.warn("No fragment generated for partition index %s out of %d parts".format(partIndex, nPart))
+        new PartitionedFragment()
     }
   }
 
-  def getAxisIndex( axisClass: String ): Option[Int] = {
-    def missing = { logger.warn( "Axis of type %s does not exist in variable %s".format( axisClass, fullname ) ); None }
-    def getOption( ival: Int ) = ival match { case -1 => missing; case x => Option(x) }
-    val coord_axes = dataset.getCoordinateAxes
-    dataset.getCoordinateAxis( axisClass ) match {
-      case Some( coord_axis ) => getOption( coord_axes.indexOf( coord_axis ) )
-      case None => missing
-    }
+  def getAxisIndex( axisClass: Char ): Int = {
+    val coord_axis = dataset.getCoordinateAxis(axisClass)
+    ncVariable.findDimensionIndex( coord_axis.getShortName )
   }
 
   def getAxisSpecs( axisConf: List[OperationSpecs] ): AxisSpecs = {
     val axis_ids = mutable.HashSet[Int]()
-    for( opSpec <- axisConf ) axis_ids ++= opSpec.getSpec("axes").split(",").flatMap( sval => getAxisIndex( sval ) )
+    for( opSpec <- axisConf ) {
+      val axes = opSpec.getSpec("axes")
+      val axis_chars: List[Char] = if( axes.contains(',') ) axes.split(",").map(_.head).toList else axes.toList
+      axis_ids ++= axis_chars.map( cval => getAxisIndex( cval ) )
+    }
     new AxisSpecs( axisIds=axis_ids.toSet )
   }
 

@@ -8,7 +8,7 @@ class OperationNotationParser extends JavaTokenParsers {
   def new_key: String = { key_index += 1; "ivar#" + key_index }
   def expr: Parser[Map[String, Any]] = repsep(function, ",") ^^ (Map() ++ _)
   def arglist: Parser[List[String]] = "(" ~> repsep(value, ",") <~ ")"
-  def value: Parser[String] = """[a-zA-Z0-9_:.*]*""".r
+  def value: Parser[String] = """[a-zA-Z0-9_ :.*]*""".r
   def name: Parser[String] = """[a-zA-Z0-9_.]*""".r
   def fname: Parser[String] = (
     name ~ ":" ~ name ^^ { case x ~ ":" ~ y => y + "~" + x }
