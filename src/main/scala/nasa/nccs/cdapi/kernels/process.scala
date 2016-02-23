@@ -81,7 +81,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute( inputSubsets: List[PartitionedFragment] ): ExecutionResult
+  def execute( inputSubsets: List[PartitionedFragment], optargs: Map[String,String] ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {
