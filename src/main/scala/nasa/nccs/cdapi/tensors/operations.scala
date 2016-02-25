@@ -5,7 +5,6 @@ trait TensorAccumulatorOp {
   def insert( value: Float ): Unit
   def result: Array[Float]
   def length: Int
-
 }
 
 trait TensorCombinerOp {
@@ -29,5 +28,14 @@ object subOp extends TensorCombinerOp {
 object addOp extends TensorCombinerOp {
   def combine( value0: Float, value1: Float ): Float = { value0 + value1 }
 }
+
+object divOp extends TensorCombinerOp {
+  def combine( value0: Float, value1: Float ): Float = { value0 / value1 }
+}
+
+object multOp extends TensorCombinerOp {
+  def combine( value0: Float, value1: Float ): Float = { value0 * value1 }
+}
+
 
 

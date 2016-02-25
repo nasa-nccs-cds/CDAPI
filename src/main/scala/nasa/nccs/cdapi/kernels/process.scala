@@ -1,7 +1,7 @@
 package nasa.nccs.cdapi.kernels
 
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
-import nasa.nccs.cdapi.cdm.PartitionedFragment
+import nasa.nccs.cdapi.cdm.{BinnedArray, PartitionedFragment}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -65,6 +65,7 @@ class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
 
+class ExecutionContext( val fragments: List[PartitionedFragment], val bins: Option[BinnedArray[_]], val args: Map[String, String] ) {}
 
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
@@ -81,7 +82,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute( inputSubsets: List[PartitionedFragment], optargs: Map[String,String] ): ExecutionResult
+  def execute( context: ExecutionContext ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {

@@ -1,10 +1,5 @@
 package nasa.nccs.cdapi.cdm
-
-import java.util.{Locale, Formatter}
-
 import ucar.ma2
-import ucar.nc2.dataset.{CoordinateAxis1DTime, CoordinateAxis1D}
-
 
 class SectionPartitioner ( val roi: ma2.Section, val nPartitions: Int ) {
 
@@ -41,26 +36,3 @@ object partitionTest extends App {
   println( "%d == %d ?".format( r0.length, total_ranges ) )
 }
 
-class BinPartitioner( val dataset: CDSDataset, val binSpecs: Array[String] ) {
-  import ucar.nc2.constants.AxisType
-  val axisClass = binSpecs(0).toLowerCase
-  val binStep = binSpecs(1).toLowerCase
-  val cycleOpt = if(binSpecs.length > 2) Some( binSpecs(2).toLowerCase ) else None
-  val coord_axis: CoordinateAxis1D = dataset.getCoordinateAxis(axisClass(0)) match {
-    case caxis: CoordinateAxis1D => caxis;
-    case x => throw new Exception("Coordinate Axis type %s can't currently be binned".format(x.getClass.getName))
-  }
-  val units = coord_axis.getUnitsString
-  val axisBins = getAxisBins
-
-  def getAxisBins: Array[Int] = {
-    coord_axis.getAxisType match {
-      case AxisType.Time =>
-        val tcoord_axis = CoordinateAxis1DTime.factory( dataset.ncDataset, coord_axis, new Formatter() )
-        binStep match {
-          case "month" => for( cval <- coord_axis.getCoordValues ) yield { 0 }
-        }
-    }
-  }
-
-}
