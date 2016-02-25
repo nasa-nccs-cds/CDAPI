@@ -163,7 +163,7 @@ class CDSVariable(val name: String, val dataset: CDSDataset, val ncVariable: nc2
     }
   }
 
-  def getBinnedArray( binSpecs: String ) = BinnedArray[aveAccumulator]( dataset, BinSpec(binSpecs) )
+  def getBinnedArray( binSpecs: String ) = BinnedSliceArray[aveSliceAccumulator]( dataset, BinSpec(binSpecs) )
 
   def getAxisIndex( axisClass: Char ): Int = {
     val coord_axis = dataset.getCoordinateAxis(axisClass)

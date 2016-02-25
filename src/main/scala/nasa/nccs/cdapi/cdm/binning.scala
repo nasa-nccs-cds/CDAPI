@@ -14,13 +14,15 @@ import scala.reflect.runtime.universe._
 trait BinAccumulator {
   def reset: Unit
   def insert( value: Float ): Unit
-  def result: Array[Float]
+  def nresults: Int
+  def result( index: Int = 0 ): Option[Float]
 }
 
 trait BinSliceAccumulator {
   def reset: Unit
   def insert( values: Nd4jMaskedTensor ): Unit
-  def result: Array[Nd4jMaskedTensor]
+  def nresults: Int
+  def result( index: Int = 0 ): Option[Nd4jMaskedTensor]
 }
 
 object BinSpec {
@@ -41,23 +43,32 @@ class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
   protected val _accumulatorArray: IndexedSeq[T] = (0 until nbins).map(ival => T_ctor().asInstanceOf[T])
 }
 
-class BinnedArray[ T<:BinAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int ) extends BinnedArrayBase[T]( nbins ) {
-  def insert( binIndex: Int, value: Float ): Unit = _accumulatorArray( binIndices(binIndex) ).insert( value )
-  def result: Array[Array[Float]] = _accumulatorArray.map( _.result ).toArray
-}
+//class BinnedArray[ T<:BinAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int ) extends BinnedArrayBase[T]( nbins ) {
+//  def insert( binIndex: Int, value: Float ): Unit = _accumulatorArray( binIndices(binIndex) ).insert( value )
+//  def result: Array[Float] = _accumulatorArray.map( _.result ).toArray
+//}
 
 class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], private val nbins: Int )  extends BinnedArrayBase[T]( nbins )  {
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = _accumulatorArray( binIndices(binIndex) ).insert( values )
-  def result: Array[Array[Nd4jMaskedTensor]] = _accumulatorArray.map( _.result ).toArray
+  var refSliceOpt: Option[Nd4jMaskedTensor]  = None
+  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = { _accumulatorArray( binIndices(binIndex) ).insert( values ); if(refSliceOpt == None) refSliceOpt = Some(values) }
+  def nresults = _accumulatorArray(0).nresults
+
+  private def getAccumulatorResult( bin_index: Int, result_index: Int ): Nd4jMaskedTensor =
+    _accumulatorArray(bin_index).result(result_index) match {
+      case Some(result_array) => result_array;
+      case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
+    }
+
+  def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
 }
 
-object BinnedArray {
+object BinnedSliceArray {
   import ucar.nc2.constants.AxisType
   import ucar.nc2.time.CalendarPeriod.Field._
   import ucar.nc2.time.CalendarDate
   import ucar.nc2.dataset.{CoordinateAxis1DTime, CoordinateAxis1D}
 
-  def apply[ T<:BinAccumulator: TypeTag ](dataset: CDSDataset, binSpec: BinSpec  ) = {
+  def apply[ T<:BinSliceAccumulator: TypeTag ](dataset: CDSDataset, binSpec: BinSpec  ): BinnedSliceArray[T] = {
     val coord_axis: CoordinateAxis1D = dataset.getCoordinateAxis( binSpec.axis ) match {
       case caxis: CoordinateAxis1D => caxis;
       case x => throw new Exception("Coordinate Axis type %s can't currently be binned".format(x.getClass.getName))
@@ -71,11 +82,11 @@ object BinnedArray {
           case "month" =>
             if (binSpec.cycle == "year") {
               val binIndices = tcoord_axis.getCalendarDates.map( _.getFieldValue(Month) ).toArray
-              new BinnedArray[T]( binIndices, 12 )
+              new BinnedSliceArray[T]( binIndices, 12 )
             } else {
               val year_offset = tcoord_axis.getCalendarDate(0).getFieldValue(Year)
               val binIndices = tcoord_axis.getCalendarDates.map( cdate => cdate.getFieldValue(Month) + cdate.getFieldValue(Year) - year_offset ).toArray
-              new BinnedArray[T]( binIndices, coord_axis.getShape(0) )
+              new BinnedSliceArray[T]( binIndices, coord_axis.getShape(0) )
             }
         }
       case x => throw new Exception("Binning not yet implemented for this axis type: %s".format(x.getClass.getName))
@@ -83,36 +94,47 @@ object BinnedArray {
   }
 }
 
-class aveSliceAccumulator( invalid: Float, val shape: Int* ) extends BinSliceAccumulator {
-  var _value: Nd4jMaskedTensor = new Nd4jMaskedTensor( Nd4j.zeros(shape:_*), invalid )
-  var _count = 0
-  def reset: Unit = { _value.tensor.assign(0f); _count = 0 }
-  def insert( values: Nd4jMaskedTensor ): Unit = { _value += values; _count += 1 }
-  def result: Nd4jMaskedTensor = _value/_count
+class aveSliceAccumulator extends BinSliceAccumulator {
+  private var _value: Option[Nd4jMaskedTensor] = None
+  private var _count = 0
+  private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = { if( _value == None ) { _value = Some( template.zeros ) }; _value.get }
+  def reset: Unit = { _value = None; _count = 0 }
+  def insert( values: Nd4jMaskedTensor ): Unit = { accumulator(values) += values; _count += 1 }
+  def nresults = 1
+
+  def result( index: Int = 0 ): Option[Nd4jMaskedTensor] = index match {
+    case 0 => _value match { case None => None;  case Some(accum_array) => Some(accum_array / _count) }
+    case x => None
+  }
 }
 
-class aveAccumulator extends BinAccumulator {
-  var _value = 0f
-  var _count = 0
-  def reset: Unit = { _value = 0f; _count = 0 }
-  def insert( value: Float ): Unit = { _value+= value; _count += 1 }
-  def result = Array(_value/_count )
-}
 
-class sumAccumulator extends BinAccumulator {
-  var _value = 0f
-  def reset: Unit = { _value = 0f }
-  def insert( value: Float ): Unit = { _value += value }
-  def result: Array[Float] =  Array(_value)
-}
 
-class maxminAccumulator extends BinAccumulator {
-  var _max = Float.NegativeInfinity
-  var _min = Float.PositiveInfinity
-  def reset: Unit = { _max = Float.NegativeInfinity;  _min = Float.PositiveInfinity }
-  def insert( value: Float ): Unit = { _max = math.max(value,_max); _min = math.min(value,_min) }
-  def result: Array[Float] =  Array(_max,_min)
-}
+//class aveAccumulator extends BinAccumulator {
+//  var _value = 0f
+//  var _count = 0
+//  def reset: Unit = { _value = 0f; _count = 0 }
+//  def insert( value: Float ): Unit = { _value+= value; _count += 1 }
+//  def result = Array(_value/_count )
+//  def nresults = 1
+//}
+//
+//class sumAccumulator extends BinAccumulator {
+//  var _value = 0f
+//  def reset: Unit = { _value = 0f }
+//  def insert( value: Float ): Unit = { _value += value }
+//  def result: Array[Float] =  Array(_value)
+//  def nresults = 1
+//}
+//
+//class maxminAccumulator extends BinAccumulator {
+//  var _max = Float.NegativeInfinity
+//  var _min = Float.PositiveInfinity
+//  def reset: Unit = { _max = Float.NegativeInfinity;  _min = Float.PositiveInfinity }
+//  def insert( value: Float ): Unit = { _max = math.max(value,_max); _min = math.min(value,_min) }
+//  def result: Array[Float] =  Array(_max,_min)
+//  def nresults = 2
+//}
 
 
 

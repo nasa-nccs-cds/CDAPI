@@ -1,16 +1,27 @@
 package nasa.nccs.cdapi.tensors
 
-import nasa.nccs.cdapi.cdm.BinnedArray
-import org.nd4j.linalg.api.ndarray.{ INDArray }
+import nasa.nccs.cdapi.cdm.{ BinnedSliceArray, BinSliceAccumulator }
+import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.cpu.NDArray
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.indexing.INDArrayIndex
+import scala.reflect.runtime._
+import scala.reflect.runtime.universe._
+
 
 // import org.nd4s.Implicits._
 import scala.collection.immutable.IndexedSeq
 // import scala.language.implicitConversions
 //import scala.collection.JavaConversions._
 ////import scala.collection.JavaConverters._
+
+object Nd4jM {
+  def concat( dimension: Int, mTensors: Array[Nd4jMaskedTensor] ): Nd4jMaskedTensor = {
+    assert( mTensors.length > 0, "Attempt to concatenate empty collection of arrays")
+    val tensor = Nd4j.concat( dimension, mTensors.map(_.tensor):_*  )
+    new Nd4jMaskedTensor( tensor, mTensors(0).invalid )
+  }
+}
 
 class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float = Float.NaN ) extends Serializable {
   val name: String = "Nd4jMaskedTensor"
@@ -22,6 +33,8 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
  // def apply = this
 //  def apply(indexes: Int*) = tensor.get(indexes.toArray).toFloat
   def data: Array[Float] = tensor.data.asFloat
+
+  def masked( tensor: INDArray ) = new Nd4jMaskedTensor( tensor, invalid )
 
   def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
     val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.exists(_ == x)) None else Some(shape(x)))
@@ -38,13 +51,9 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
     new Nd4jMaskedTensor( result_array, invalid )
   }
 
-  def binSlice(dimension: Int, slice: INDArray, bins: BinnedArray): INDArray = {
-
-  }
-
-  def execBinningOp( dimension: Int, bins: BinnedArray ): Nd4jMaskedTensor = {
-    val binnedSlices = Nd4j.concat( dimension, (0 until tensor.shape()(dimension)).map( iS => binSlice( iS, tensor.slice(iS), bins ) ):_* )
-    new Nd4jMaskedTensor( binnedSlices, invalid )
+  def execBinningOp[T<:BinSliceAccumulator: TypeTag ]( dimension: Int, bins: BinnedSliceArray[T] ): List[Nd4jMaskedTensor] = {
+    for(iS <- (0 until tensor.shape()(dimension))) bins.insert( iS, masked(tensor.slice( iS, dimension )) )
+    ( 0 until bins.nresults ).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
   }
 
   def dup: Nd4jMaskedTensor = { new Nd4jMaskedTensor( tensor.dup, invalid ) }
@@ -104,7 +113,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
 
   def mean( dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( meanOp, dimensions:_* )
 
-  def bin( dimension: Int, bins: BinnedArray ): Nd4jMaskedTensor = execBinningOp( dimension: Int, bins: BinnedArray )
+  def bin[T<:BinSliceAccumulator: TypeTag ]( dimension: Int, bins: BinnedSliceArray[T] ): List[Nd4jMaskedTensor] = execBinningOp[T]( dimension, bins )
 
   def -(array: Nd4jMaskedTensor) = execCombinerOp( subOp, array )
 
@@ -144,6 +153,9 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
     val IndArray = tensor.get(ranges: _*)
     new Nd4jMaskedTensor(IndArray)
   }
+
+  def zeros: Nd4jMaskedTensor = new Nd4jMaskedTensor( Nd4j.zerosLike(tensor), invalid )
+  def invalids: Nd4jMaskedTensor = new Nd4jMaskedTensor( Nd4j.emptyLike(tensor).assign(invalid), invalid )
 
   /*
 
