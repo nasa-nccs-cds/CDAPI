@@ -12,8 +12,6 @@ import scala.collection.immutable.IndexedSeq
 //import scala.collection.JavaConversions._
 ////import scala.collection.JavaConverters._
 
-class SliceBinOp(val bins: BinnedArray) extends SliceOp { }
-
 class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float = Float.NaN ) extends Serializable {
   val name: String = "Nd4jMaskedTensor"
   val shape = tensor.shape
