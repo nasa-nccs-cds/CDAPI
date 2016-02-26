@@ -38,9 +38,9 @@ object BinSpec {
 class BinSpec( val axis: Char, val step: String, val cycle: String )
 
 class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
-  private val T_tt = typeTag[T]
-  private val T_ctor = currentMirror.reflectClass(T_tt.tpe.typeSymbol.asClass).reflectConstructor(T_tt.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq(0).asMethod)
-  protected val _accumulatorArray: IndexedSeq[T] = (0 until nbins).map(ival => T_ctor().asInstanceOf[T])
+  private val ttag = typeTag[T]
+  private val ctor = currentMirror.reflectClass(ttag.tpe.typeSymbol.asClass).reflectConstructor(ttag.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq(0).asMethod)
+  protected val _accumulatorArray: IndexedSeq[T] = (0 until nbins).map(ival => ctor().asInstanceOf[T])
 }
 
 //class BinnedArray[ T<:BinAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int ) extends BinnedArrayBase[T]( nbins ) {
@@ -81,11 +81,11 @@ object BinnedSliceArray {
         binSpec.step match {
           case "month" =>
             if (binSpec.cycle == "year") {
-              val binIndices = tcoord_axis.getCalendarDates.map( _.getFieldValue(Month) ).toArray
+              val binIndices = tcoord_axis.getCalendarDates.map( _.getFieldValue(Month)-1 ).toArray
               new BinnedSliceArray[T]( binIndices, 12 )
             } else {
               val year_offset = tcoord_axis.getCalendarDate(0).getFieldValue(Year)
-              val binIndices = tcoord_axis.getCalendarDates.map( cdate => cdate.getFieldValue(Month) + cdate.getFieldValue(Year) - year_offset ).toArray
+              val binIndices = tcoord_axis.getCalendarDates.map( cdate => cdate.getFieldValue(Month)-1 + cdate.getFieldValue(Year) - year_offset ).toArray
               new BinnedSliceArray[T]( binIndices, coord_axis.getShape(0) )
             }
         }

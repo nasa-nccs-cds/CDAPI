@@ -1,7 +1,7 @@
 package nasa.nccs.cdapi.kernels
 
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
-import nasa.nccs.cdapi.cdm.{BinnedSliceArray, PartitionedFragment}
+import nasa.nccs.cdapi.cdm.{aveSliceAccumulator, BinnedSliceArray, PartitionedFragment}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -65,7 +65,7 @@ class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
 
-class ExecutionContext( val fragments: List[PartitionedFragment], val bins: Option[BinnedSliceArray[_]], val args: Map[String, String] ) {}
+class ExecutionContext( val fragments: List[PartitionedFragment], val bins: Option[BinnedSliceArray[aveSliceAccumulator]], val args: Map[String, String] ) {}
 
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)

@@ -4,7 +4,7 @@ import nasa.nccs.cdapi.cdm.{ BinnedSliceArray, BinSliceAccumulator }
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.cpu.NDArray
 import org.nd4j.linalg.factory.Nd4j
-import org.nd4j.linalg.indexing.INDArrayIndex
+import org.nd4j.linalg.indexing.{NDArrayIndex, INDArrayIndex}
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
@@ -36,6 +36,12 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
 
   def masked( tensor: INDArray ) = new Nd4jMaskedTensor( tensor, invalid )
 
+  def slice( slice_index: Int, dimension: Int ): Nd4jMaskedTensor = {
+    var shape_indices = NDArrayIndex.createCoveringShape(shape)
+    shape_indices(dimension) = NDArrayIndex.interval( slice_index, slice_index, true )
+    new Nd4jMaskedTensor( tensor.get(shape_indices:_*), invalid )
+  }
+
   def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
     val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.exists(_ == x)) None else Some(shape(x)))
     val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).applyAccumulatorOp(op))): _*)
@@ -52,7 +58,8 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
   }
 
   def execBinningOp[T<:BinSliceAccumulator: TypeTag ]( dimension: Int, bins: BinnedSliceArray[T] ): List[Nd4jMaskedTensor] = {
-    for(iS <- (0 until tensor.shape()(dimension))) bins.insert( iS, masked(tensor.slice( iS, dimension )) )
+    var slice_test = slice(0,0)
+    for(iS <- (0 until tensor.shape()(dimension))) bins.insert( iS, slice( iS, dimension ) )
     ( 0 until bins.nresults ).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
   }
 
