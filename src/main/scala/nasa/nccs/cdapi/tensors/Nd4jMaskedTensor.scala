@@ -1,8 +1,7 @@
 package nasa.nccs.cdapi.tensors
 
-import nasa.nccs.cdapi.cdm.{ BinnedSliceArray, BinSliceAccumulator }
+import nasa.nccs.cdapi.cdm.{aveSliceAccumulator, BinnedSliceArray, BinSliceAccumulator}
 import org.nd4j.linalg.api.ndarray.INDArray
-import org.nd4j.linalg.cpu.NDArray
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.indexing.{NDArrayIndex, INDArrayIndex}
 import scala.reflect.runtime._
@@ -23,23 +22,25 @@ object Nd4jM {
   }
 }
 
-class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float = Float.NaN ) extends Serializable {
+class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Float = Float.NaN ) extends Serializable {
   val name: String = "Nd4jMaskedTensor"
   val shape = tensor.shape
 
   override def toString =  "%s[%s]".format( name, shape.mkString(",") )
   def rows = tensor.rows
   def cols = tensor.columns
- // def apply = this
-//  def apply(indexes: Int*) = tensor.get(indexes.toArray).toFloat
   def data: Array[Float] = tensor.data.asFloat
+  def toRawDataString = data.mkString("[ ",", "," ]")
+  def toDataString = tensor.toString
+ // def apply( indices: Int*): Float = tensor.getFloat( indices )
 
   def masked( tensor: INDArray ) = new Nd4jMaskedTensor( tensor, invalid )
 
   def slice( slice_index: Int, dimension: Int ): Nd4jMaskedTensor = {
-    var shape_indices = NDArrayIndex.createCoveringShape(shape)
-    shape_indices(dimension) = NDArrayIndex.interval( slice_index, slice_index, true )
-    new Nd4jMaskedTensor( tensor.get(shape_indices:_*), invalid )
+    val offsets = Array.fill[Int](shape.length)(0).updated(dimension,slice_index)
+    val stride = Array.fill[Int](shape.length)(1)
+    val newshape = shape.updated(dimension,1)
+    new Nd4jMaskedTensor( tensor.subArray( offsets, newshape, stride ), invalid )
   }
 
   def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
@@ -58,9 +59,9 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
   }
 
   def execBinningOp[T<:BinSliceAccumulator: TypeTag ]( dimension: Int, bins: BinnedSliceArray[T] ): List[Nd4jMaskedTensor] = {
-    var slice_test = slice(0,0)
-    for(iS <- (0 until tensor.shape()(dimension))) bins.insert( iS, slice( iS, dimension ) )
-    ( 0 until bins.nresults ).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
+//    println( "ExecBinningOp, data = %s ".format( toDataString ) )
+    (0 until tensor.shape()(dimension)).map( iS => bins.insert( iS, slice( iS, dimension ) ) )
+    (0 until bins.nresults).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
   }
 
   def dup: Nd4jMaskedTensor = { new Nd4jMaskedTensor( tensor.dup, invalid ) }
@@ -73,49 +74,50 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
 
   def applyAccumulatorOp( op: TensorAccumulatorOp ): Array[Float] = {
     op.init
-    for( iC <- 0 until tensor.length )  {
+    ( 0 until tensor.length ).map( iC =>  {
       val v = tensor.getFloat(iC)
       if( v != invalid ) op.insert(v)
-    }
+    } )
     op.result
   }
 
   def applyCombinerOp( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Array[Float] = {
     op.init
-    val result = for( iC <- 0 until tensor.length ) yield {
+    val result = ( 0 until tensor.length ).map( iC => {
       val v0 = tensor.getFloat(iC)
       val v1 = maskedArray.tensor.getFloat(iC)
       if( (v0 == invalid) || (v1 == maskedArray.invalid) ) invalid else op.combine(v0,v1)
-    }
+    } )
     result.toArray
   }
 
   def applyCombinerOp( op: TensorCombinerOp, value: Float ): Array[Float] = {
     op.init
-    val result = for( iC <- 0 until tensor.length ) yield {
+    val result = ( 0 until tensor.length ).map( iC => {
       val v0 = tensor.getFloat(iC)
       if( v0 == invalid ) invalid else op.combine(v0,value)
-    }
+    } )
     result.toArray
   }
 
   def applyInPlaceCombinerOp( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Unit = {
     op.init
-    for( iC <- 0 until tensor.length ) {
+    ( 0 until tensor.length ).map( iC => {
       val v0 = tensor.getFloat(iC)
       val v1 = maskedArray.tensor.getFloat(iC)
       val result = if( (v0 == invalid) || (v1 == maskedArray.invalid) ) invalid else op.combine(v0,v1)
+//      println( "applyInPlaceCombinerOp[%d]: %f & %f -> %f".format( iC, v0, v1, result) )
       tensor.putScalar( iC, result )
-    }
+    } )
   }
 
   def applyInPlaceCombinerOp( op: TensorCombinerOp, value: Float ): Unit = {
     op.init
-    for( iC <- 0 until tensor.length ) yield {
+    ( 0 until tensor.length ).map( iC =>  {
       val v0 = tensor.getFloat(iC)
       val result = if( v0 == invalid ) invalid else op.combine(v0,value)
       tensor.putScalar( iC, result )
-    }
+    } )
   }
 
   def mean( dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( meanOp, dimensions:_* )
@@ -240,11 +242,16 @@ class Nd4jMaskedTensor( val tensor: INDArray = new NDArray(), val invalid: Float
 
 
 object tensorTest extends App {
-  var shape = Array(2,2,2)
-  val full_mtensor = new Nd4jMaskedTensor( Nd4j.create( Array(1f,2f,3f,4f,5f,6f,7f,8f), shape ), 0 )
-  val full_mtensor1 = new Nd4jMaskedTensor( Nd4j.create( Array(10f,20f,30f,40f,50f,60f,70f,80f), shape ), 0 )
-  val diff_tensor = full_mtensor1 - full_mtensor
-  println( "." )
+  var shape = Array(2,9)
+  var raw_data = Nd4j.create( Array(1f,2f,3f,4f,5f,6f,7f,8f,9f,1f,2f,3f,4f,5f,6f,7f,8f,9f), shape )
+  val full_mtensor = new Nd4jMaskedTensor( raw_data, Float.NaN )
+  val bin_indices = Array(0,0,0,1,1,1,2,2,2)
+  val bins = new BinnedSliceArray[aveSliceAccumulator]( bin_indices, 3 )
+  val binned_value = full_mtensor.bin[aveSliceAccumulator](1,bins)
+  println( binned_value(0).shape.mkString(",") )
+  println( binned_value(0).data.mkString(",") )
 }
+
+
 
 

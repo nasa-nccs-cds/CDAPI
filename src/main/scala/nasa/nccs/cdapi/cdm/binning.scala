@@ -49,17 +49,23 @@ class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
 //}
 
 class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], private val nbins: Int )  extends BinnedArrayBase[T]( nbins )  {
-  var refSliceOpt: Option[Nd4jMaskedTensor]  = None
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = { _accumulatorArray( binIndices(binIndex) ).insert( values ); if(refSliceOpt == None) refSliceOpt = Some(values) }
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+  private var refSliceOpt: Option[Nd4jMaskedTensor]  = None
   def nresults = _accumulatorArray(0).nresults
+  def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
+
+  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = {
+    val bin_index = binIndices(binIndex)
+    _accumulatorArray( bin_index ).insert( values )
+//    logger.info( " Insert slice [%s] values = %s into bin %d, accum values = %s ".format(values.shape.mkString(","), values.toDataString,  bin_index, _accumulatorArray( bin_index ).toString ) )
+    if(refSliceOpt == None) refSliceOpt = Some(values)
+  }
 
   private def getAccumulatorResult( bin_index: Int, result_index: Int ): Nd4jMaskedTensor =
     _accumulatorArray(bin_index).result(result_index) match {
       case Some(result_array) => result_array;
       case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
     }
-
-  def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
 }
 
 object BinnedSliceArray {
@@ -97,10 +103,19 @@ object BinnedSliceArray {
 class aveSliceAccumulator extends BinSliceAccumulator {
   private var _value: Option[Nd4jMaskedTensor] = None
   private var _count = 0
-  private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = { if( _value == None ) { _value = Some( template.zeros ) }; _value.get }
-  def reset: Unit = { _value = None; _count = 0 }
-  def insert( values: Nd4jMaskedTensor ): Unit = { accumulator(values) += values; _count += 1 }
   def nresults = 1
+  def reset: Unit = { _value = None; _count = 0 }
+  override def toString = _value match { case None => "None"; case Some(mtensor) => "Accumulator{ count = %d, value = %s }".format( _count, mtensor.toDataString ) }
+
+  private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
+    if( _value == None ) _value = Some( template.zeros )
+    _value.get
+  }
+
+  def insert( values: Nd4jMaskedTensor ): Unit = {
+    accumulator(values) += values
+    _count += 1
+  }
 
   def result( index: Int = 0 ): Option[Nd4jMaskedTensor] = index match {
     case 0 => _value match { case None => None;  case Some(accum_array) => Some(accum_array / _count) }
