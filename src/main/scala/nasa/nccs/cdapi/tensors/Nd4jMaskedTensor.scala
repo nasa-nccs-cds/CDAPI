@@ -1,6 +1,6 @@
 package nasa.nccs.cdapi.tensors
 
-import nasa.nccs.cdapi.cdm.{aveSliceAccumulator, BinnedSliceArray, BinSliceAccumulator}
+import nasa.nccs.cdapi.cdm._
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.indexing.{NDArrayIndex, INDArrayIndex}
@@ -58,8 +58,8 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
     new Nd4jMaskedTensor( result_array, invalid )
   }
 
-  def execBinningOp[T<:BinSliceAccumulator: TypeTag ]( dimension: Int, bins: BinnedSliceArray[T] ): List[Nd4jMaskedTensor] = {
-//    println( "ExecBinningOp, data = %s ".format( toDataString ) )
+  def execBinningOp( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = {
+    val bins: IBinnedSliceArray = binFactory.getBinnedArray
     (0 until tensor.shape()(dimension)).map( iS => bins.insert( iS, slice( iS, dimension ) ) )
     (0 until bins.nresults).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
   }
@@ -122,7 +122,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
 
   def mean( dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( meanOp, dimensions:_* )
 
-  def bin[T<:BinSliceAccumulator: TypeTag ]( dimension: Int, bins: BinnedSliceArray[T] ): List[Nd4jMaskedTensor] = execBinningOp[T]( dimension, bins )
+  def bin( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = execBinningOp( dimension, binFactory )
 
   def -(array: Nd4jMaskedTensor) = execCombinerOp( subOp, array )
 
@@ -239,19 +239,5 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   private implicit def AbstractConvert(array: Nd4jMaskedTensor): Nd4jMaskedTensor = array.asInstanceOf[Nd4jMaskedTensor]
  */
 }
-
-
-object tensorTest extends App {
-  var shape = Array(2,9)
-  var raw_data = Nd4j.create( Array(1f,2f,3f,4f,5f,6f,7f,8f,9f,1f,2f,3f,4f,5f,6f,7f,8f,9f), shape )
-  val full_mtensor = new Nd4jMaskedTensor( raw_data, Float.NaN )
-  val bin_indices = Array(0,0,0,1,1,1,2,2,2)
-  val bins = new BinnedSliceArray[aveSliceAccumulator]( bin_indices, 3 )
-  val binned_value = full_mtensor.bin[aveSliceAccumulator](1,bins)
-  println( binned_value(0).shape.mkString(",") )
-  println( binned_value(0).data.mkString(",") )
-}
-
-
 
 

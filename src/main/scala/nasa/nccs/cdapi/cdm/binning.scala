@@ -3,6 +3,9 @@ import java.util.Formatter
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
+import ucar.nc2.constants.AxisType
+import ucar.nc2.dataset.{CoordinateAxis1DTime, CoordinateAxis1D}
+import ucar.nc2.time.CalendarPeriod.Field._
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -25,17 +28,58 @@ trait BinSliceAccumulator {
   def result( index: Int = 0 ): Option[Nd4jMaskedTensor]
 }
 
-object BinSpec {
-  def apply( binSpec: String ) = {
+object BinnedArrayFactory {
+  def apply( binSpec: String, dataset: CDSDataset ) = {
     val binSpecs = binSpec.split('|')
     val axis = binSpecs(0).toLowerCase.trim.head
     val step = binSpecs(1).toLowerCase.trim
-    val cycle = if (binSpecs.length > 2) binSpecs(2).toLowerCase.trim else ""
-    new BinSpec( axis, step, cycle )
+    val reducer = if (binSpecs.length > 2) binSpecs(2).toLowerCase.trim else "ave"
+    val cycle = if (binSpecs.length > 3) binSpecs(3).toLowerCase.trim else ""
+    new BinnedArrayFactory( axis, step, reducer, cycle, dataset )
   }
 }
 
-class BinSpec( val axis: Char, val step: String, val cycle: String )
+class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String, val cycle: String, dataset: CDSDataset ) {
+  private case class SliceArraySpec( nBins: Int, binIndices: Array[Int]  )
+
+  lazy val coordinateAxis: CoordinateAxis1D = dataset.getCoordinateAxis( axis ) match {
+    case caxis: CoordinateAxis1D => caxis;
+    case x => throw new Exception("Coordinate Axis type %s can't currently be binned".format(x.getClass.getName))
+  }
+  lazy val timeAxis: CoordinateAxis1DTime = CoordinateAxis1DTime.factory(dataset.ncDataset, coordinateAxis, new Formatter())
+
+  private def createArrayInstance( sliceArraySpec: SliceArraySpec ): IBinnedSliceArray = {
+    reducer match {
+      case "ave" => new BinnedSliceArray[aveSliceAccumulator]( sliceArraySpec.binIndices, sliceArraySpec.nBins )
+      case x => throw new Exception("Binning not yet implemented for this reducer type: %s".format(reducer))
+    }
+  }
+
+  def getBinnedArray: IBinnedSliceArray = {
+    val units = coordinateAxis.getUnitsString
+    val sliceArraySpec = coordinateAxis.getAxisType match {
+      case AxisType.Time =>
+        step match {
+          case "month" =>
+            if (cycle == "year") {
+              new SliceArraySpec( 12, timeAxis.getCalendarDates.map( _.getFieldValue(Month)-1 ).toArray )
+            } else {
+              val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
+              new SliceArraySpec( coordinateAxis.getShape(0), timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Month)-1 + cdate.getFieldValue(Year) - year_offset ).toArray )
+            }
+          case x => throw new Exception("Binning not yet implemented for this step type: %s".format(step))
+        }
+      case x => throw new Exception("Binning not yet implemented for this axis type: %s".format(x.getClass.getName))
+    }
+    createArrayInstance( sliceArraySpec )
+  }
+}
+
+trait IBinnedSliceArray {
+  def nresults: Int
+  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit
+  def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor]
+}
 
 class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
   private val ttag = typeTag[T]
@@ -48,7 +92,7 @@ class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
 //  def result: Array[Float] = _accumulatorArray.map( _.result ).toArray
 //}
 
-class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], private val nbins: Int )  extends BinnedArrayBase[T]( nbins )  {
+class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], private val nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   private var refSliceOpt: Option[Nd4jMaskedTensor]  = None
   def nresults = _accumulatorArray(0).nresults
@@ -66,38 +110,6 @@ class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices
       case Some(result_array) => result_array;
       case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
     }
-}
-
-object BinnedSliceArray {
-  import ucar.nc2.constants.AxisType
-  import ucar.nc2.time.CalendarPeriod.Field._
-  import ucar.nc2.time.CalendarDate
-  import ucar.nc2.dataset.{CoordinateAxis1DTime, CoordinateAxis1D}
-
-  def apply[ T<:BinSliceAccumulator: TypeTag ](dataset: CDSDataset, binSpec: BinSpec  ): BinnedSliceArray[T] = {
-    val coord_axis: CoordinateAxis1D = dataset.getCoordinateAxis( binSpec.axis ) match {
-      case caxis: CoordinateAxis1D => caxis;
-      case x => throw new Exception("Coordinate Axis type %s can't currently be binned".format(x.getClass.getName))
-    }
-    val units = coord_axis.getUnitsString
-
-    coord_axis.getAxisType match {
-      case AxisType.Time =>
-        val tcoord_axis = CoordinateAxis1DTime.factory(dataset.ncDataset, coord_axis, new Formatter())
-        binSpec.step match {
-          case "month" =>
-            if (binSpec.cycle == "year") {
-              val binIndices = tcoord_axis.getCalendarDates.map( _.getFieldValue(Month)-1 ).toArray
-              new BinnedSliceArray[T]( binIndices, 12 )
-            } else {
-              val year_offset = tcoord_axis.getCalendarDate(0).getFieldValue(Year)
-              val binIndices = tcoord_axis.getCalendarDates.map( cdate => cdate.getFieldValue(Month)-1 + cdate.getFieldValue(Year) - year_offset ).toArray
-              new BinnedSliceArray[T]( binIndices, coord_axis.getShape(0) )
-            }
-        }
-      case x => throw new Exception("Binning not yet implemented for this axis type: %s".format(x.getClass.getName))
-    }
-  }
 }
 
 class aveSliceAccumulator extends BinSliceAccumulator {
