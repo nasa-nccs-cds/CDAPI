@@ -59,9 +59,15 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   }
 
   def execBinningOp( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = {
+    val t0 = System.nanoTime
     val bins: IBinnedSliceArray = binFactory.getBinnedArray
+    val t1 = System.nanoTime
     (0 until tensor.shape()(dimension)).map( iS => bins.insert( iS, slice( iS, dimension ) ) )
-    (0 until bins.nresults).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
+    val t2 = System.nanoTime
+    val result = (0 until bins.nresults).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
+    val t3 = System.nanoTime
+    println("Exec Binning Op: init time = %.4f s, insert time = %.4f s, concat time = %.4f s".format( (t1-t0)/1.0E9, (t2-t1)/1.0E9, (t3-t2)/1.0E9 ) )
+    result
   }
 
   def dup: Nd4jMaskedTensor = { new Nd4jMaskedTensor( tensor.dup, invalid ) }
@@ -69,7 +75,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   def broadcast( shape: Int* ) = new Nd4jMaskedTensor( tensor.broadcast(shape:_*), invalid )
 
   def subset( index: Int, dimensions: Int*  ): Nd4jMaskedTensor = {
-    new Nd4jMaskedTensor( tensor.tensorAlongDimension(index, dimensions:_*), invalid )
+    new Nd4jMaskedTensor( tensor.tensorAlongDimension(index, dimensions:_*), invalid )    // List all varying dimensions, index applied to non-varying dimensions.
   }
 
   def applyAccumulatorOp( op: TensorAccumulatorOp ): Array[Float] = {

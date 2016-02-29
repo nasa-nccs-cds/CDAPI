@@ -57,12 +57,12 @@ class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDatase
 
   def getCoordinateAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
 
-  def loadVariable( varName: String ): cdm.CDSVariable = {
+  def loadVariable( uid: String, varName: String ): cdm.CDSVariable = {
     variables.get(varName) match {
       case None =>
         val ncVariable = ncDataset.findVariable(varName)
         if (ncVariable == null) throw new IllegalStateException("Variable '%s' was not loaded".format(varName))
-        val cdsVariable = new cdm.CDSVariable( varName, this, ncVariable )
+        val cdsVariable = new cdm.CDSVariable( uid, varName, this, ncVariable )
         variables += ( varName -> cdsVariable )
         cdsVariable
       case Some(cdsVariable) => cdsVariable
