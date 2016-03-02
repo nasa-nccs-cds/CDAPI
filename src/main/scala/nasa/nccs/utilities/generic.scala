@@ -7,6 +7,7 @@ import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.runtime.{universe=>ru}
+import org.slf4j.Logger
 
 object cdsutils {
 
@@ -26,6 +27,14 @@ object cdsutils {
     import java.io.File
     val cpitems = System.getProperty("java.class.path").split(File.pathSeparator)
     for ( cpitem <- cpitems; fileitem = new File(cpitem); if fileitem.isFile && fileitem.getName.toLowerCase.endsWith(".jar") ) yield new JarFile(fileitem)
+  }
+
+  def time[R](logger:Logger, label: String)(block: => R): R = {
+    val t0 = System.nanoTime()
+    val result = block
+    val t1 = System.nanoTime()
+    logger.debug( "%s: Time = %.4f s".format( label, (t1-t0)/1.0E9 ))
+    result
   }
 
   def getJarAttribute(jarFile: JarFile, attribute_name: String ): String = {

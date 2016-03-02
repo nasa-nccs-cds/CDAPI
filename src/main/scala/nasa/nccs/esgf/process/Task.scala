@@ -32,6 +32,14 @@ class TaskRequest(val name: String, val variableMap : Map[String,DataContainer],
     errorReports += error_rep
   }
 
+  def getDomain( data_source: DataSource ): DomainContainer= {
+    domainMap.get(data_source.domain) match {
+      case Some(domain_container) => domain_container
+      case None =>
+        throw new Exception("Undefined domain for dataset " + data_source.name + ", domain = " + data_source.domain)
+    }
+  }
+
   def validate() = {
     for( variable <- inputVariables; if variable.isSource; domid = variable.getSource.domain; vid=variable.getSource.name; if !domid.isEmpty ) {
       if ( !domainMap.contains(domid) ) {

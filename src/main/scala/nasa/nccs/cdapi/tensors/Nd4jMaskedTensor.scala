@@ -1,6 +1,7 @@
 package nasa.nccs.cdapi.tensors
 
 import nasa.nccs.cdapi.cdm._
+import nasa.nccs.utilities.cdsutils
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.indexing.{NDArrayIndex, INDArrayIndex}
@@ -23,6 +24,7 @@ object Nd4jM {
 }
 
 class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Float = Float.NaN ) extends Serializable {
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   val name: String = "Nd4jMaskedTensor"
   val shape = tensor.shape
 
@@ -59,14 +61,9 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   }
 
   def execBinningOp( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = {
-    val t0 = System.nanoTime
-    val bins: IBinnedSliceArray = binFactory.getBinnedArray
-    val t1 = System.nanoTime
+    val bins: IBinnedSliceArray = cdsutils.time( logger, "getBinnedArray" ) { binFactory.getBinnedArray }
     (0 until tensor.shape()(dimension)).map( iS => bins.insert( iS, slice( iS, dimension ) ) )
-    val t2 = System.nanoTime
     val result = (0 until bins.nresults).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
-    val t3 = System.nanoTime
-    println("Exec Binning Op: init time = %.4f s, insert time = %.4f s, concat time = %.4f s".format( (t1-t0)/1.0E9, (t2-t1)/1.0E9, (t3-t2)/1.0E9 ) )
     result
   }
 

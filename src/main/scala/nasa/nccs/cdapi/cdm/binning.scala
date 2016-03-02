@@ -1,6 +1,7 @@
 package nasa.nccs.cdapi.cdm
 import java.util.Formatter
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
+import nasa.nccs.utilities.cdsutils
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
 import ucar.nc2.constants.AxisType
@@ -40,6 +41,7 @@ object BinnedArrayFactory {
 }
 
 class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String, val cycle: String, dataset: CDSDataset ) {
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   private case class SliceArraySpec( nBins: Int, binIndices: Array[Int]  )
 
   lazy val coordinateAxis: CoordinateAxis1D = dataset.getCoordinateAxis( axis ) match {
@@ -50,7 +52,10 @@ class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String,
 
   private def createArrayInstance( sliceArraySpec: SliceArraySpec ): IBinnedSliceArray = {
     reducer match {
-      case "ave" => new BinnedSliceArray[aveSliceAccumulator]( sliceArraySpec.binIndices, sliceArraySpec.nBins )
+      case "ave" =>
+        val binIndices = sliceArraySpec.binIndices
+        val nBins = sliceArraySpec.nBins
+        cdsutils.time( logger, "new BinnedSliceArray" ) { new BinnedSliceArray[aveSliceAccumulator]( binIndices, nBins ) }
       case x => throw new Exception("Binning not yet implemented for this reducer type: %s".format(reducer))
     }
   }
@@ -62,7 +67,8 @@ class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String,
         step match {
           case "month" =>
             if (cycle == "year") {
-              new SliceArraySpec( 12, timeAxis.getCalendarDates.map( _.getFieldValue(Month)-1 ).toArray )
+              val binIndices: Array[Int] = cdsutils.time( logger, "binIndices" )( timeAxis.getCalendarDates.map( _.getFieldValue(Month)-1 ).toArray )
+              cdsutils.time( logger, "SliceArraySpec" )( SliceArraySpec( 12, binIndices ) )
             } else {
               val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
               new SliceArraySpec( coordinateAxis.getShape(0), timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Month)-1 + cdate.getFieldValue(Year) - year_offset ).toArray )
@@ -82,9 +88,13 @@ trait IBinnedSliceArray {
 }
 
 class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
-  private val ttag = typeTag[T]
-  private val ctor = currentMirror.reflectClass(ttag.tpe.typeSymbol.asClass).reflectConstructor(ttag.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq(0).asMethod)
-  protected val _accumulatorArray: IndexedSeq[T] = (0 until nbins).map(ival => ctor().asInstanceOf[T])
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+  protected val _accumulatorArray: IndexedSeq[T] = getAccumArray
+    private def getAccumArray: IndexedSeq[T] = cdsutils.time(logger, "BinnedArray:getAccumArray") {
+      val ttag = typeTag[T]
+    val ctor = currentMirror.reflectClass(ttag.tpe.typeSymbol.asClass).reflectConstructor(ttag.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq(0).asMethod)
+    (0 until nbins).map(ival => ctor().asInstanceOf[T])
+  }
 }
 
 //class BinnedArray[ T<:BinAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int ) extends BinnedArrayBase[T]( nbins ) {
@@ -92,8 +102,7 @@ class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
 //  def result: Array[Float] = _accumulatorArray.map( _.result ).toArray
 //}
 
-class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], private val nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray {
-  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], private val nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray  {
   private var refSliceOpt: Option[Nd4jMaskedTensor]  = None
   def nresults = _accumulatorArray(0).nresults
   def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray

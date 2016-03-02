@@ -2,7 +2,7 @@ package nasa.nccs.cdapi.kernels
 
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import nasa.nccs.cdapi.cdm.{BinnedArrayFactory, BinnedSliceArray, PartitionedFragment}
-import nasa.nccs.esgf.process.DataManager
+import nasa.nccs.esgf.process.{DomainContainer, DataManager}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -64,7 +64,19 @@ class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
 
-class ExecutionContext( val fragments: List[PartitionedFragment], val binArrayOpt: Option[BinnedArrayFactory], val dataManager: DataManager, val args: Map[String, String] ) {}
+class ExecutionContext( val fragments: List[PartitionedFragment], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val args: Map[String, String] ) {
+
+  def getDomain( domain_id: String ): DomainContainer= {
+    domainMap.get(domain_id) match {
+      case Some(domain_container) => domain_container
+      case None =>
+        throw new Exception("Undefined domain in ExecutionContext: " + domain_id)
+    }
+  }
+  def getSubset( var_uid: String, domain_id: String ) = {
+    dataManager.getSubset( var_uid, getDomain(domain_id) )
+  }
+}
 
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
