@@ -7,6 +7,7 @@ import nasa.nccs.cdapi.cdm
 import ucar.nc2.constants.AxisType
 import ucar.nc2.dataset.{ NetcdfDataset, CoordinateSystem, CoordinateAxis }
 import scala.collection.mutable
+import scala.collection.concurrent
 import scala.collection.JavaConversions._
 // import scala.collection.JavaConverters._
 
@@ -53,7 +54,7 @@ object CDSDataset {
 class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDataset, val coordSystem: CoordinateSystem ) {
   val attributes = ncDataset.getGlobalAttributes
   val coordAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
-  val variables = mutable.HashMap.empty[String,cdm.CDSVariable]
+  val variables = concurrent.TrieMap[String,cdm.CDSVariable]()
 
   def getCoordinateAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
 

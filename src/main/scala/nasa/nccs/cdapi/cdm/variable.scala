@@ -14,6 +14,7 @@ import ucar.nc2.dataset.{CoordinateAxis, CoordinateAxis1D, CoordinateSystem, Coo
 import scala.collection.JavaConversions._
 // import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.concurrent
 
 object BoundsRole extends Enumeration { val Start, End = Value }
 
@@ -28,7 +29,8 @@ class CDSVariable( val uid: String, val name: String, val dataset: CDSDataset, v
   val fullname = ncVariable.getFullName
   val attributes = nc2.Attribute.makeMap(ncVariable.getAttributes).toMap
   val missing = getAttributeValue( "missing_value", "NaN" ).toFloat
-  val subsets = mutable.ListBuffer[PartitionedFragment]()
+  val subsets = concurrent.TrieMap[Int,PartitionedFragment]()
+  private var subsetIndex = 0
 
   def getAttributeValue( key: String, default_value: String  ) =  attributes.get( key ) match { case Some( attr_val ) => attr_val.toString.split('=').last; case None => default_value }
   override def toString = "\nCDSVariable(%s) { description: '%s', shape: %s, dims: %s, }\n  --> Variable Attributes: %s".format(name, description, shape.mkString("[", " ", "]"), dims.mkString("[", ",", "]"), attributes.mkString("\n\t\t", "\n\t\t", "\n"))
@@ -193,12 +195,13 @@ class CDSVariable( val uid: String, val name: String, val dataset: CDSDataset, v
 
   def addSubset( uid: String, roiSection: ma2.Section, array: Nd4jMaskedTensor, axisSpecs: AxisSpecs ): PartitionedFragment = {
     val subset = new PartitionedFragment( uid, array, roiSection, axisSpecs )
-    subsets += subset
+    subsetIndex+=1
+    subsets += ( subsetIndex -> subset )
     subset
   }
 
   def findSubset( requestedSection: ma2.Section, copy: Boolean=false ): Option[PartitionedFragment] = {
-    val validSubsets = subsets.filter( _.contains(requestedSection) )
+    val validSubsets = subsets.values.filter( _.contains(requestedSection) )
     validSubsets.size match {
       case 0 => None;
       case _ => Some( validSubsets.minBy( _.size ).cutNewSubset(requestedSection, copy ) )

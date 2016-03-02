@@ -2,18 +2,21 @@ package nasa.nccs.esgf.process
 
 import nasa.nccs.cdapi.cdm.{BinnedArrayFactory, CDSVariable, PartitionedFragment, CDSDataset}
 import nasa.nccs.cdapi.kernels.DataFragment
+import collection.JavaConversions._
+import scala.collection.JavaConverters._
 import ucar.ma2
 
 import scala.collection.mutable
+import scala.collection.concurrent
 
 trait DataLoader {
   def getDataset( data_source: DataSource ): CDSDataset
 }
-// val domainMap: Map[String,DomainContainer]
+
 class DataManager( val dataLoader: DataLoader ) {
   val logger = org.slf4j.LoggerFactory.getLogger("nasa.nccs.cds2.engine.DataManager")
-  var subsets = mutable.Map[String,PartitionedFragment]()
-  var variables = mutable.Map[String,CDSVariable]()
+  var subsets = concurrent.TrieMap[String,PartitionedFragment]()
+  var variables = concurrent.TrieMap[String,CDSVariable]()
 
   def getBinnedArrayFactory( operation: OperationContainer ): Option[BinnedArrayFactory] = {
     val uid = operation.inputs(0)
