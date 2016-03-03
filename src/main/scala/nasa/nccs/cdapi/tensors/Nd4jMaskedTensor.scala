@@ -46,6 +46,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   }
 
   def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
+    assert( dimensions.length > 0, "Must specify at least one dimension ('axes' arg) for this operation")
     val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.exists(_ == x)) None else Some(shape(x)))
     val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).applyAccumulatorOp(op))): _*)
     slices.reshape(filtered_shape :+ op.length: _* )

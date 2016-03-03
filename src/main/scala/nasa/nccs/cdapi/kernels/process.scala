@@ -2,7 +2,7 @@ package nasa.nccs.cdapi.kernels
 
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import nasa.nccs.cdapi.cdm.{BinnedArrayFactory, BinnedSliceArray, PartitionedFragment}
-import nasa.nccs.esgf.process.{DomainContainer, DataManager}
+import nasa.nccs.esgf.process.{DataSource, DomainContainer, DataManager}
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -47,11 +47,11 @@ class SingleInputExecutionResult( val operation: String, manifest: ResultManifes
     </operation>
 }
 
-abstract class DataFragment( val uid: String, array: Nd4jMaskedTensor )  extends Serializable {
+abstract class DataFragment( array: Nd4jMaskedTensor )  extends Serializable {
   val metaData = new mutable.HashMap[String, String]
 
-  def this( uid: String, array: Nd4jMaskedTensor, metaDataVar: (String, String)* ) {
-    this( uid, array )
+  def this( array: Nd4jMaskedTensor, metaDataVar: (String, String)* ) {
+    this( array )
     metaDataVar.map(p => metaData += p)
   }
   def data: Nd4jMaskedTensor = array
@@ -76,6 +76,7 @@ class ExecutionContext( val fragments: List[PartitionedFragment], val binArrayOp
   def getSubset( var_uid: String, domain_id: String ) = {
     dataManager.getSubset( var_uid, getDomain(domain_id) )
   }
+  def getDataSources: Map[String,DataSource] = dataManager.getDataSources
 }
 
 abstract class Kernel {

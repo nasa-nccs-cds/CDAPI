@@ -9,6 +9,7 @@ import scala.collection.mutable
 import scala.reflect.runtime.{universe=>ru}
 import org.slf4j.Logger
 
+
 object cdsutils {
 
   def flatlist[T]( values: Option[T]* ): List[T] = values.flatten.toList

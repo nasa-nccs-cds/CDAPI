@@ -20,7 +20,7 @@ object BoundsRole extends Enumeration { val Start, End = Value }
 
 object CDSVariable { }
 
-class CDSVariable( val uid: String, val name: String, val dataset: CDSDataset, val ncVariable: nc2.Variable) {
+class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc2.Variable) {
   val logger = org.slf4j.LoggerFactory.getLogger("nasa.nccs.cds2.cdm.CDSVariable")
   val description = ncVariable.getDescription
   val dims = ncVariable.getDimensionsAll.toList
@@ -155,13 +155,13 @@ class CDSVariable( val uid: String, val name: String, val dataset: CDSDataset, v
             val array = ncVariable.read(partSection)
             val ndArray: INDArray = getNDArray(array)
             val axisSpecs = getAxisSpecs(axisConf)
-            addSubset(uid, roiSection, new Nd4jMaskedTensor(ndArray), axisSpecs)
+            addSubset( roiSection, new Nd4jMaskedTensor(ndArray), axisSpecs)
           case Some(subset) =>
             subset
         }
       case None =>
         logger.warn("No fragment generated for partition index %s out of %d parts".format(partIndex, nPart))
-        new PartitionedFragment(name)
+        new PartitionedFragment()
     }
   }
 
@@ -187,14 +187,14 @@ class CDSVariable( val uid: String, val name: String, val dataset: CDSDataset, v
         val array = ncVariable.read(roiSection)
         val ndArray: INDArray = getNDArray(array)
         val axisSpecs = getAxisSpecs( axisConf )
-        addSubset( uid, roiSection, new Nd4jMaskedTensor( ndArray, missing ), axisSpecs )
+        addSubset( roiSection, new Nd4jMaskedTensor( ndArray, missing ), axisSpecs )
       case Some(subset) =>
         subset
     }
   }
 
-  def addSubset( uid: String, roiSection: ma2.Section, array: Nd4jMaskedTensor, axisSpecs: AxisSpecs ): PartitionedFragment = {
-    val subset = new PartitionedFragment( uid, array, roiSection, axisSpecs )
+  def addSubset( roiSection: ma2.Section, array: Nd4jMaskedTensor, axisSpecs: AxisSpecs ): PartitionedFragment = {
+    val subset = new PartitionedFragment( array, roiSection, axisSpecs )
     subsetIndex+=1
     subsets += ( subsetIndex -> subset )
     subset
@@ -213,10 +213,10 @@ object PartitionedFragment {
   def sectionToIndices( section: ma2.Section ): List[INDArrayIndex] = section.getRanges.map(range => NDArrayIndex.interval( range.first, range.last+1 ) ).toList
 }
 
-class PartitionedFragment( uid: String, array: Nd4jMaskedTensor, val roiSection: ma2.Section, val axisSpecs: AxisSpecs, metaDataVar: (String, String)*  ) extends DataFragment( uid, array, metaDataVar:_* ) {
+class PartitionedFragment( array: Nd4jMaskedTensor, val roiSection: ma2.Section, val axisSpecs: AxisSpecs, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {
   val LOG = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def this( uid: String ) = this( uid, new Nd4jMaskedTensor, new ma2.Section, new AxisSpecs )
+  def this() = this( new Nd4jMaskedTensor, new ma2.Section, new AxisSpecs )
 
   override def toString = { "PartitionedFragment: shape = %s, section = %s".format( array.shape.toString, roiSection.toString ) }
 
@@ -224,7 +224,7 @@ class PartitionedFragment( uid: String, array: Nd4jMaskedTensor, val roiSection:
     val newSection = roiSection.intersect( cutSection ).shiftOrigin( roiSection )
     val indices = PartitionedFragment.sectionToIndices(newSection)
     val newDataArray: Nd4jMaskedTensor = array( indices )
-    new PartitionedFragment( uid, if(copy) newDataArray.dup else newDataArray, newSection, axisSpecs )
+    new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection, axisSpecs )
   }
 
   def cutNewSubset( newSection: ma2.Section, copy: Boolean ): PartitionedFragment = {
@@ -232,7 +232,7 @@ class PartitionedFragment( uid: String, array: Nd4jMaskedTensor, val roiSection:
     else {
       val relativeSection = newSection.shiftOrigin( roiSection )
       val newDataArray: Nd4jMaskedTensor = array( PartitionedFragment.sectionToIndices(relativeSection) )
-      new PartitionedFragment( uid, if(copy) newDataArray.dup else newDataArray, newSection, axisSpecs )
+      new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection, axisSpecs )
     }
   }
   def size: Long = roiSection.computeSize

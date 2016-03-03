@@ -1,11 +1,8 @@
 package nasa.nccs.esgf.process
 
 import nasa.nccs.cdapi.cdm.{BinnedArrayFactory, CDSVariable, PartitionedFragment, CDSDataset}
-import nasa.nccs.cdapi.kernels.DataFragment
 import collection.JavaConversions._
 import scala.collection.JavaConverters._
-import ucar.ma2
-
 import scala.collection.mutable
 import scala.collection.concurrent
 
@@ -15,55 +12,65 @@ trait DataLoader {
 
 class DataManager( val dataLoader: DataLoader ) {
   val logger = org.slf4j.LoggerFactory.getLogger("nasa.nccs.cds2.engine.DataManager")
-  var subsets = concurrent.TrieMap[String,PartitionedFragment]()
-  var variables = concurrent.TrieMap[String,CDSVariable]()
+  private val uidToSource = mutable.HashMap[String,DataSource]()
 
-  def getBinnedArrayFactory( operation: OperationContainer ): Option[BinnedArrayFactory] = {
+  def getDataSources: Map[String,DataSource] = uidToSource.toMap
+
+  def getBinnedArrayFactory(operation: OperationContainer): Option[BinnedArrayFactory] = {
     val uid = operation.inputs(0)
     operation.optargs.get("bins") match {
       case None => None
-      case Some(binSpec) =>
-        variables.get(uid) match {
-          case None => throw new Exception( "DataManager can't find variable %s in getBinScaffold, variables = [%s]".format(uid,variables.keys.mkString(",")))
-          case Some(variable) => Some( BinnedArrayFactory( binSpec, variable.dataset ) )
-        }
+      case Some(binSpec) => Option( BinnedArrayFactory(binSpec, getVariable(uid).dataset) )
     }
+  }
+  def missing_variable( uid: String ) = { throw new Exception( "Can't find Variable '%s' in uids: [ %s ]".format( uid, uidToSource.keySet.mkString(", "))) }
+
+  def getVariable(uid: String): CDSVariable = {
+    uidToSource.get(uid) match {
+      case Some(dataSource) => getVariable( dataSource )
+      case None => missing_variable(uid)
+    }
+  }
+  def getVariable( dataSource: DataSource ): CDSVariable = {
+    var dataset: CDSDataset = dataLoader.getDataset( dataSource )
+    dataset.loadVariable( dataSource.name )
   }
 
   def getVariableData(uid: String): PartitionedFragment = {
-    subsets.get(uid) match {
-      case Some(subset) => subset
-      case None => throw new Exception("Can't find subset Data for Variable $uid")
+    uidToSource.get(uid) match {
+      case Some(dataSource) =>
+        dataSource.getData match {
+          case None => throw new Exception( "Can't find data fragment for data source:  %s " + dataSource.toString )
+          case Some( fragment ) => fragment
+        }
+      case None => missing_variable(uid)
     }
   }
-  //  case Some(fragment) => domainMap.get(domain) match {
-  //    case None => throw new Exception("Undefined domain for fragment " + uid + ", domain = " + domain)
-  //    case Some(domain_container)
 
   def getSubset( uid: String, domain_container: DomainContainer ): PartitionedFragment = {
-    subsets.get( uid ) match {
-      case None => throw new Exception("Can't find variable data for uid '" + uid + "' in getSubset" )
-      case Some(fragment) => variables.get( uid ) match {
-        case None => throw new Exception("Undefined variable for fragment " + uid + ", domain = " + domain_container.name )
-        case Some(variable) => fragment.cutIntersection( variable.getSubSection( domain_container.axes ), true )
-      }
+    uidToSource.get(uid) match {
+      case Some(dataSource) =>
+        dataSource.getData match {
+          case None => throw new Exception( "Can't find data fragment for data source:  %s " + dataSource.toString )
+          case Some( fragment ) =>  fragment.cutIntersection( getVariable( dataSource ).getSubSection( domain_container.axes ), true )
+        }
+      case None => missing_variable(uid)
     }
   }
 
-  def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): DataFragment = {
+  def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): PartitionedFragment = {
     val uid = dataContainer.uid
     val data_source = dataContainer.getSource
-    subsets.get(uid) match {
-      case Some(subset) => subset
+    data_source.getData match {
       case None =>
         val dataset: CDSDataset = dataLoader.getDataset(data_source)
-        val variable = dataset.loadVariable( uid, data_source.name )
-        val fragment = variable.loadRoi( domain_container.axes, dataContainer.getOpSpecs )
-        subsets += uid -> fragment
-        variables += uid -> variable
-        logger.info("Loaded variable %s (%s:%s) subset data, shape = %s ".format(uid, data_source.collection, data_source.name, fragment.shape.toString) )
+        val variable = dataset.loadVariable(data_source.name)
+        val fragment = variable.loadRoi(domain_container.axes, dataContainer.getOpSpecs)
+        uidToSource += (uid -> data_source)
+        data_source.setData(fragment)
+        logger.info("Loaded variable %s (%s:%s) subset data, shape = %s ".format(uid, data_source.collection, data_source.name, fragment.shape.toString))
         fragment
+      case Some(fragment) => fragment
     }
   }
-
 }

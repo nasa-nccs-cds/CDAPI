@@ -1,5 +1,7 @@
 package nasa.nccs.esgf.process
 
+import nasa.nccs.cdapi.cdm.PartitionedFragment
+
 import scala.util.matching.Regex
 import scala.collection.{mutable, immutable}
 import scala.collection.mutable.HashSet
@@ -179,8 +181,11 @@ object containerTest extends App {
 }
 
 class DataSource( val name: String, val collection: String, val domain: String ) {
+  private var dataFrag: Option[PartitionedFragment] = None
   override def toString =  s"DataSource { name = $name, collection = $collection, domain = $domain }"
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
+  def setData( fragment: PartitionedFragment ) = { assert( dataFrag == None, "Overwriting Data Fragment in " + toString ); dataFrag = Option(fragment) }
+  def getData: Option[PartitionedFragment] = dataFrag
 }
 
 object OperationSpecs {
