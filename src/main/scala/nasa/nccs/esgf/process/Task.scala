@@ -1,6 +1,7 @@
 package nasa.nccs.esgf.process
 
 import nasa.nccs.cdapi.cdm.PartitionedFragment
+import ucar.ma2
 
 import scala.util.matching.Regex
 import scala.collection.{mutable, immutable}
@@ -180,13 +181,24 @@ object containerTest extends App {
   println( fv )
 }
 
+class PartitionSpec( val axisIndex: Int, val nPart: Int, val partIndex: Int = 0 ) {
+  override def toString =  s"PartitionSpec { axis = $axisIndex, nPart = $nPart, partIndex = $partIndex }"
+}
+
 class DataSource( val name: String, val collection: String, val domain: String ) {
-  private var dataFrag: Option[PartitionedFragment] = None
+  def this( dsource: DataSource ) = this( dsource.name, dsource.collection, dsource.domain )
   override def toString =  s"DataSource { name = $name, collection = $collection, domain = $domain }"
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
-  def setData( fragment: PartitionedFragment ) = { assert( dataFrag == None, "Overwriting Data Fragment in " + toString ); dataFrag = Option(fragment) }
-  def getData: Option[PartitionedFragment] = dataFrag
 }
+
+class DataFragmentSpec( val varname: String, val collection: String, val roi: ma2.Section, val partitions: PartitionSpec* )  {
+  override def toString =  "DataFragmentSpec { varname = %s, collection = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, roi.toString, partitions.map(_.toString).mkString(", "))
+
+//  private var dataFrag: Option[PartitionedFragment] = None
+  //  def setData( fragment: PartitionedFragment ) = { assert( dataFrag == None, "Overwriting Data Fragment in " + toString ); dataFrag = Option(fragment) }
+  //  def getData: Option[PartitionedFragment] = dataFrag
+}
+
 
 object OperationSpecs {
   def apply( op: OperationContainer ) = new OperationSpecs( op.name, op.optargs )

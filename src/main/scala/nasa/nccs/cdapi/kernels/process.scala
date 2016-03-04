@@ -1,8 +1,8 @@
 package nasa.nccs.cdapi.kernels
 
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
-import nasa.nccs.cdapi.cdm.{BinnedArrayFactory, BinnedSliceArray, PartitionedFragment}
-import nasa.nccs.esgf.process.{DataSource, DomainContainer, DataManager}
+import nasa.nccs.cdapi.cdm.{CDSVariable, BinnedArrayFactory, BinnedSliceArray, PartitionedFragment}
+import nasa.nccs.esgf.process._
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
@@ -73,10 +73,15 @@ class ExecutionContext( val fragments: List[PartitionedFragment], val binArrayOp
         throw new Exception("Undefined domain in ExecutionContext: " + domain_id)
     }
   }
-  def getSubset( var_uid: String, domain_id: String ) = {
-    dataManager.getSubset( var_uid, getDomain(domain_id) )
+//  def getSubset( var_uid: String, domain_id: String ) = {
+//    dataManager.getSubset( var_uid, getDomain(domain_id) )
+//  }
+  def getDataSources: Map[String,DataFragmentSpec] = dataManager.getDataSources
+  def getFragmentSpec( uid: String ): DataFragmentSpec = dataManager.getFragmentSpec(uid) match {
+    case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
+    case Some( fragSpec ) => fragSpec
   }
-  def getDataSources: Map[String,DataSource] = dataManager.getDataSources
+  def getAxisSpecs(): AxisSpecs =  new AxisSpecs()
 }
 
 abstract class Kernel {

@@ -8,9 +8,10 @@ import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.indexing.{INDArrayIndex, NDArrayIndex}
 import ucar.nc2.time.{CalendarDate, CalendarDateRange}
-import nasa.nccs.esgf.process.{OperationSpecs, DomainAxis}
+import nasa.nccs.esgf.process._
 import ucar.{ma2, nc2}
 import ucar.nc2.dataset.{CoordinateAxis, CoordinateAxis1D, CoordinateSystem, CoordinateAxis1DTime}
+import java.util.concurrent.atomic.AtomicReference
 import scala.collection.JavaConversions._
 // import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -29,8 +30,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   val fullname = ncVariable.getFullName
   val attributes = nc2.Attribute.makeMap(ncVariable.getAttributes).toMap
   val missing = getAttributeValue( "missing_value", "NaN" ).toFloat
-  val subsets = concurrent.TrieMap[Int,PartitionedFragment]()
-  private var subsetIndex = 0
+  private val subsets = new AtomicReference(List[DataFragmentSpec]())
 
   def getAttributeValue( key: String, default_value: String  ) =  attributes.get( key ) match { case Some( attr_val ) => attr_val.toString.split('=').last; case None => default_value }
   override def toString = "\nCDSVariable(%s) { description: '%s', shape: %s, dims: %s, }\n  --> Variable Attributes: %s".format(name, description, shape.mkString("[", " ", "]"), dims.mkString("[", ",", "]"), attributes.mkString("\n\t\t", "\n\t\t", "\n"))
@@ -142,25 +142,25 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     result
   }
 
-  def loadRoiPartition(roi: List[DomainAxis], partIndex: Int, partAxis: Char, nPart: Int, axisConf: List[OperationSpecs]): PartitionedFragment = {
+  def createFragmentSpec( roi: List[DomainAxis], partIndex: Int=0, partAxis: Char='*', nPart: Int=1 ) = {
     val partitionAxis = dataset.getCoordinateAxis(partAxis)
     val partAxisIndex = ncVariable.findDimensionIndex(partitionAxis.getShortName)
     assert(partAxisIndex != -1, "CDS2-CDSVariable: Can't find axis %s in variable %s".format(partitionAxis.getShortName, ncVariable.getNameAndDimensions))
     val roiSection: ma2.Section = getSubSection(roi)
-    val sp = new SectionPartitioner(roiSection, nPart)
-    sp.getPartition(partIndex, partAxisIndex) match {
+    new DataFragmentSpec( name, dataset.name, roiSection, new PartitionSpec(partAxisIndex,nPart,partIndex) )
+  }
+
+  def loadPartition( fragmentSpec : DataFragmentSpec): PartitionedFragment = {
+    val partition = fragmentSpec.partitions.head
+    val sp = new SectionPartitioner(fragmentSpec.roi, partition.nPart)
+    sp.getPartition(partition.partIndex, partition.axisIndex ) match {
       case Some(partSection) =>
-        findSubset(partSection) match {
-          case None =>
-            val array = ncVariable.read(partSection)
-            val ndArray: INDArray = getNDArray(array)
-            val axisSpecs = getAxisSpecs(axisConf)
-            addSubset( roiSection, new Nd4jMaskedTensor(ndArray), axisSpecs)
-          case Some(subset) =>
-            subset
-        }
+        val array = ncVariable.read(partSection)
+        val ndArray: INDArray = getNDArray(array)
+        addSubset( fragmentSpec )
+        createPartitionedFragment( fragmentSpec, ndArray )
       case None =>
-        logger.warn("No fragment generated for partition index %s out of %d parts".format(partIndex, nPart))
+        logger.warn("No fragment generated for partition index %s out of %d parts".format(partition.partIndex, partition.nPart))
         new PartitionedFragment()
     }
   }
@@ -180,31 +180,31 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     new AxisSpecs( axisIds=axis_ids.toSet )
   }
 
-  def loadRoi( roi: List[DomainAxis], axisConf: List[OperationSpecs] ): PartitionedFragment = {
-    val roiSection: ma2.Section = getSubSection(roi)
-    findSubset(roiSection) match {
-      case None =>
-        val array = ncVariable.read(roiSection)
-        val ndArray: INDArray = getNDArray(array)
-        val axisSpecs = getAxisSpecs( axisConf )
-        addSubset( roiSection, new Nd4jMaskedTensor( ndArray, missing ), axisSpecs )
-      case Some(subset) =>
-        subset
+  def loadRoi( fragmentSpec: DataFragmentSpec ): PartitionedFragment = {
+    val array = ncVariable.read(fragmentSpec.roi)
+    val ndArray: INDArray = getNDArray(array)
+    var result = createPartitionedFragment( fragmentSpec, ndArray )
+    addSubset( fragmentSpec )
+    result
+  }
+
+  def createPartitionedFragment( fragmentSpec: DataFragmentSpec, ndArray: INDArray ): PartitionedFragment =  {
+    new PartitionedFragment(new Nd4jMaskedTensor(ndArray, missing), fragmentSpec.roi)
+  }
+
+  def addSubset( newFragmentSpec: DataFragmentSpec ): Unit = {
+    while (true) {
+      val oldSpecList = subsets.get
+      val newSpecList = newFragmentSpec :: oldSpecList
+      if(subsets.compareAndSet( oldSpecList, newSpecList ) ) { return }
     }
   }
 
-  def addSubset( roiSection: ma2.Section, array: Nd4jMaskedTensor, axisSpecs: AxisSpecs ): PartitionedFragment = {
-    val subset = new PartitionedFragment( array, roiSection, axisSpecs )
-    subsetIndex+=1
-    subsets += ( subsetIndex -> subset )
-    subset
-  }
-
-  def findSubset( requestedSection: ma2.Section, copy: Boolean=false ): Option[PartitionedFragment] = {
-    val validSubsets = subsets.values.filter( _.contains(requestedSection) )
+  def findSubset( requestedSection: ma2.Section, copy: Boolean=false ): Option[DataFragmentSpec] = {
+    val validSubsets = subsets.get.filter( _.roi.contains(requestedSection) )
     validSubsets.size match {
       case 0 => None;
-      case _ => Some( validSubsets.minBy( _.size ).cutNewSubset(requestedSection, copy ) )
+      case _ => Some( validSubsets.minBy( _.roi.computeSize() ) )
     }
   }
 }
@@ -213,10 +213,10 @@ object PartitionedFragment {
   def sectionToIndices( section: ma2.Section ): List[INDArrayIndex] = section.getRanges.map(range => NDArrayIndex.interval( range.first, range.last+1 ) ).toList
 }
 
-class PartitionedFragment( array: Nd4jMaskedTensor, val roiSection: ma2.Section, val axisSpecs: AxisSpecs, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {
+class PartitionedFragment( array: Nd4jMaskedTensor, val roiSection: ma2.Section, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {
   val LOG = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def this() = this( new Nd4jMaskedTensor, new ma2.Section, new AxisSpecs )
+  def this() = this( new Nd4jMaskedTensor, new ma2.Section )
 
   override def toString = { "PartitionedFragment: shape = %s, section = %s".format( array.shape.toString, roiSection.toString ) }
 
@@ -224,7 +224,7 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val roiSection: ma2.Section,
     val newSection = roiSection.intersect( cutSection ).shiftOrigin( roiSection )
     val indices = PartitionedFragment.sectionToIndices(newSection)
     val newDataArray: Nd4jMaskedTensor = array( indices )
-    new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection, axisSpecs )
+    new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection )
   }
 
   def cutNewSubset( newSection: ma2.Section, copy: Boolean ): PartitionedFragment = {
@@ -232,7 +232,7 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val roiSection: ma2.Section,
     else {
       val relativeSection = newSection.shiftOrigin( roiSection )
       val newDataArray: Nd4jMaskedTensor = array( PartitionedFragment.sectionToIndices(relativeSection) )
-      new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection, axisSpecs )
+      new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection )
     }
   }
   def size: Long = roiSection.computeSize
