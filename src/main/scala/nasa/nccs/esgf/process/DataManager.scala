@@ -9,8 +9,8 @@ import scala.collection.concurrent
 trait DataLoader {
   def getDataset( collection: String, varName: String ): CDSDataset
   def getVariable( collection: String, varName: String ): CDSVariable
-  def loadFragment( data_source: DataFragmentSpec ): PartitionedFragment
-  def getFragment( data_source: DataFragmentSpec ): PartitionedFragment
+  def getFragment( fragSpec: DataFragmentSpec ): PartitionedFragment
+  def findEnclosingFragment(targetFragSpec: DataFragmentSpec): Option[DataFragmentSpec]
 }
 
 class DataManager( val dataLoader: DataLoader ) {
@@ -79,6 +79,6 @@ class DataManager( val dataLoader: DataLoader ) {
     val variable = dataset.loadVariable(data_source.name)
     val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(axes)
     uidToSource += ( uid -> fragmentSpec )
-    dataLoader.loadFragment(fragmentSpec)
+    dataLoader.getFragment(fragmentSpec)
   }
 }

@@ -193,6 +193,7 @@ class DataSource( val name: String, val collection: String, val domain: String )
 
 class DataFragmentSpec( val varname: String, val collection: String, val roi: ma2.Section, val partitions: PartitionSpec* )  {
   override def toString =  "DataFragmentSpec { varname = %s, collection = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, roi.toString, partitions.map(_.toString).mkString(", "))
+  def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
 
 //  private var dataFrag: Option[PartitionedFragment] = None
   //  def setData( fragment: PartitionedFragment ) = { assert( dataFrag == None, "Overwriting Data Fragment in " + toString ); dataFrag = Option(fragment) }

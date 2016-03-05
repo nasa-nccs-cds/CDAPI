@@ -1,7 +1,7 @@
 package nasa.nccs.cdapi.kernels
 
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
-import nasa.nccs.cdapi.cdm.{CDSVariable, BinnedArrayFactory, BinnedSliceArray, PartitionedFragment}
+import nasa.nccs.cdapi.cdm._
 import nasa.nccs.esgf.process._
 import org.slf4j.LoggerFactory
 
@@ -64,7 +64,7 @@ class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
 
-class ExecutionContext( val fragments: List[PartitionedFragment], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val args: Map[String, String] ) {
+class ExecutionContext( val fragments: List[KernelDataInput], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val args: Map[String, String] ) {
 
   def getDomain( domain_id: String ): DomainContainer= {
     domainMap.get(domain_id) match {
@@ -81,7 +81,6 @@ class ExecutionContext( val fragments: List[PartitionedFragment], val binArrayOp
     case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
     case Some( fragSpec ) => fragSpec
   }
-  def getAxisSpecs(): AxisSpecs =  new AxisSpecs()
 }
 
 abstract class Kernel {

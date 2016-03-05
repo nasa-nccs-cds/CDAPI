@@ -19,6 +19,8 @@ import scala.collection.concurrent
 
 object BoundsRole extends Enumeration { val Start, End = Value }
 
+class KernelDataInput( val dataFragment: PartitionedFragment, val axisSpecs: AxisSpecs ) {}
+
 object CDSVariable { }
 
 class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc2.Variable) {
@@ -150,19 +152,30 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     new DataFragmentSpec( name, dataset.name, roiSection, new PartitionSpec(partAxisIndex,nPart,partIndex) )
   }
 
-  def loadPartition( fragmentSpec : DataFragmentSpec): PartitionedFragment = {
+  def loadPartition( fragmentSpec : DataFragmentSpec, axisConf: List[OperationSpecs] ): KernelDataInput = {
     val partition = fragmentSpec.partitions.head
     val sp = new SectionPartitioner(fragmentSpec.roi, partition.nPart)
     sp.getPartition(partition.partIndex, partition.axisIndex ) match {
       case Some(partSection) =>
         val array = ncVariable.read(partSection)
         val ndArray: INDArray = getNDArray(array)
+        val axisSpecs = getAxisSpecs( axisConf )
         addSubset( fragmentSpec )
-        createPartitionedFragment( fragmentSpec, ndArray )
+        val frag = createPartitionedFragment( fragmentSpec, ndArray )
+        new KernelDataInput( frag, axisSpecs )
       case None =>
         logger.warn("No fragment generated for partition index %s out of %d parts".format(partition.partIndex, partition.nPart))
-        new PartitionedFragment()
+        new KernelDataInput( new PartitionedFragment(), new AxisSpecs() )
     }
+  }
+
+  def loadRoi( fragmentSpec: DataFragmentSpec, axisConf: List[OperationSpecs] ): KernelDataInput = {
+    val array = ncVariable.read(fragmentSpec.roi)
+    val ndArray: INDArray = getNDArray(array)
+    var frag = createPartitionedFragment( fragmentSpec, ndArray )
+    val axisSpecs = getAxisSpecs( axisConf )
+    addSubset( fragmentSpec )
+    new KernelDataInput( frag, axisSpecs )
   }
 
   def getAxisIndex( axisClass: Char ): Int = {
@@ -178,14 +191,6 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
       axis_ids ++= axis_chars.map( cval => getAxisIndex( cval ) )
     }
     new AxisSpecs( axisIds=axis_ids.toSet )
-  }
-
-  def loadRoi( fragmentSpec: DataFragmentSpec ): PartitionedFragment = {
-    val array = ncVariable.read(fragmentSpec.roi)
-    val ndArray: INDArray = getNDArray(array)
-    var result = createPartitionedFragment( fragmentSpec, ndArray )
-    addSubset( fragmentSpec )
-    result
   }
 
   def createPartitionedFragment( fragmentSpec: DataFragmentSpec, ndArray: INDArray ): PartitionedFragment =  {
