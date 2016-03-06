@@ -76,11 +76,14 @@ class ExecutionContext( val fragments: List[KernelDataInput], val binArrayOpt: O
 //  def getSubset( var_uid: String, domain_id: String ) = {
 //    dataManager.getSubset( var_uid, getDomain(domain_id) )
 //  }
-  def getDataSources: Map[String,DataFragmentSpec] = dataManager.getDataSources
-  def getFragmentSpec( uid: String ): DataFragmentSpec = dataManager.getFragmentSpec(uid) match {
+  def getDataSources: Map[String,OperationInputSpec] = dataManager.getDataSources
+
+  def getFragmentSpec( uid: String ): DataFragmentSpec = dataManager.getOperationInputSpec(uid) match {
     case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
-    case Some( fragSpec ) => fragSpec
+    case Some( inputSpec ) => inputSpec.data
   }
+
+  def getAxisSpecs( uid: String ): AxisSpecs = dataManager.getAxisSpecs( uid )
 }
 
 abstract class Kernel {

@@ -92,7 +92,7 @@ class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
   protected val _accumulatorArray: IndexedSeq[T] = getAccumArray
     private def getAccumArray: IndexedSeq[T] = cdsutils.time(logger, "BinnedArray:getAccumArray") {
       val ttag = typeTag[T]
-    val ctor = currentMirror.reflectClass(ttag.tpe.typeSymbol.asClass).reflectConstructor(ttag.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq(0).asMethod)
+    lazy val ctor = currentMirror.reflectClass(ttag.tpe.typeSymbol.asClass).reflectConstructor(ttag.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq(0).asMethod)
     (0 until nbins).map(ival => ctor().asInstanceOf[T])
   }
 }

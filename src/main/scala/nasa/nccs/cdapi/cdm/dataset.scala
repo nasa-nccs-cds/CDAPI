@@ -54,27 +54,15 @@ object CDSDataset {
 class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDataset, val coordSystem: CoordinateSystem ) {
   val attributes = ncDataset.getGlobalAttributes
   val coordAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
-  val variables = concurrent.TrieMap[String,cdm.CDSVariable]()
 
   def getCoordinateAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
 
   def loadVariable( varName: String ): cdm.CDSVariable = {
-    variables.get(varName) match {
-      case None =>
-        val ncVariable = ncDataset.findVariable(varName)
-        if (ncVariable == null) throw new IllegalStateException("Variable '%s' was not loaded".format(varName))
-        val cdsVariable = new cdm.CDSVariable( varName, this, ncVariable )
-        variables += ( varName -> cdsVariable )
-        cdsVariable
-      case Some(cdsVariable) => cdsVariable
-    }
+      val ncVariable = ncDataset.findVariable(varName)
+      if (ncVariable == null) throw new IllegalStateException("Variable '%s' was not loaded".format(varName))
+      new cdm.CDSVariable( varName, this, ncVariable )
   }
-  def getVariable( varName: String ): cdm.CDSVariable = {
-    variables.get(varName) match {
-      case None => throw new IllegalStateException("Variable '%s' was not loaded".format(varName))
-      case Some(cdsVariable) => cdsVariable
-    }
-  }
+
   def getCoordinateAxis( axisType: DomainAxis.Type.Value ): Option[CoordinateAxis] = {
     axisType match {
       case DomainAxis.Type.X => Option( coordSystem.getXaxis )

@@ -1,8 +1,9 @@
 package nasa.nccs.esgf.process
-import nasa.nccs.cdapi.cdm.{BinnedArrayFactory, CDSVariable, PartitionedFragment, CDSDataset}
+import nasa.nccs.cdapi.cdm._
 import nasa.nccs.cdapi.kernels.AxisSpecs
 import collection.JavaConversions._
 import scala.collection.JavaConverters._
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.concurrent
 
@@ -10,15 +11,24 @@ trait DataLoader {
   def getDataset( collection: String, varName: String ): CDSDataset
   def getVariable( collection: String, varName: String ): CDSVariable
   def getFragment( fragSpec: DataFragmentSpec ): PartitionedFragment
-  def findEnclosingFragment(targetFragSpec: DataFragmentSpec): Option[DataFragmentSpec]
+  def findLargestEnclosingFragSpec(targetFragSpec: DataFragmentSpec): Option[DataFragmentSpec]
+  def findEnclosingFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
+  def findEnclosedFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
 }
+
+case class OperationInputSpec( data: DataFragmentSpec, axes: AxisSpecs ) {}
 
 class DataManager( val dataLoader: DataLoader ) {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
-  private val uidToSource = mutable.HashMap[String, DataFragmentSpec]()
+  private val uidToSource = TrieMap[String, OperationInputSpec]()
 
-  def getDataSources: Map[String, DataFragmentSpec] = uidToSource.toMap
-  def getFragmentSpec( uid: String ): Option[DataFragmentSpec] = uidToSource.get( uid )
+  def getDataSources: Map[String, OperationInputSpec] = uidToSource.toMap
+  def getOperationInputSpec( uid: String ): Option[OperationInputSpec] = uidToSource.get( uid )
+
+  def getAxisSpecs( uid: String ): AxisSpecs = uidToSource.get(uid) match {
+    case Some(inputSpec) => inputSpec.axes
+    case None => missing_variable(uid)
+  }
 
   def getBinnedArrayFactory(operation: OperationContainer): Option[BinnedArrayFactory] = {
     val uid = operation.inputs(0)
@@ -34,12 +44,12 @@ class DataManager( val dataLoader: DataLoader ) {
 
   def getVariable(uid: String): CDSVariable = {
     uidToSource.get(uid) match {
-      case Some(fragSpec) => dataLoader.getVariable( fragSpec.collection, fragSpec.varname )
+      case Some(inputSpec) => dataLoader.getVariable( inputSpec.data.collection, inputSpec.data.varname )
       case None => missing_variable(uid)
     }
   }
 
-  def getAxisSpecs( uid: String, axisConf: List[OperationSpecs] ): AxisSpecs = {
+  def computeAxisSpecs( uid: String, axisConf: List[OperationSpecs] ): AxisSpecs = {
     val variable: CDSVariable = getVariable(uid)
     variable.getAxisSpecs( axisConf )
   }
@@ -48,12 +58,12 @@ class DataManager( val dataLoader: DataLoader ) {
     val baseFragment = dataLoader.getFragment(baseFragmentSpec)
     val variable = getVariable( var_uid )
     val newFragmentSpec = variable.createFragmentSpec( new_domain_container.axes )
-    baseFragment.cutNewSubset( newFragmentSpec.roi, true )
+    baseFragment.cutIntersection( newFragmentSpec.roi )
   }
 
   def getVariableData( uid: String ): PartitionedFragment = {
     uidToSource.get(uid) match {
-      case Some(fragSpec) => dataLoader.getFragment( fragSpec )
+      case Some(inputSpec) => dataLoader.getFragment( inputSpec.data )
       case None => missing_variable(uid)
     }
   }
@@ -70,15 +80,16 @@ class DataManager( val dataLoader: DataLoader ) {
 //  }
 //
 
-  def loadVariableData(dataContainer: DataContainer, domain_container: DomainContainer): PartitionedFragment = {
-    loadVariableData(dataContainer.uid, dataContainer.getSource, domain_container.axes)
-  }
 
-  def loadVariableData( uid: String, data_source: DataSource, axes: List[DomainAxis]): PartitionedFragment = {
+  def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): PartitionedFragment = {
+    val data_source: DataSource = dataContainer.getSource
     val dataset: CDSDataset = dataLoader.getDataset(data_source.collection, data_source.name)
     val variable = dataset.loadVariable(data_source.name)
-    val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(axes)
-    uidToSource += ( uid -> fragmentSpec )
+    val axisSpecs: AxisSpecs = variable.getAxisSpecs( dataContainer.getOpSpecs )
+    val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
+    uidToSource += ( dataContainer.uid -> new OperationInputSpec( fragmentSpec, axisSpecs )  )
     dataLoader.getFragment(fragmentSpec)
   }
 }
+
+
