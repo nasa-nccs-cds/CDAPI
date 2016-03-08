@@ -6,12 +6,15 @@ import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.concurrent
+import scala.concurrent.Future
+
+object FragmentSelectionCriteria extends Enumeration { val Largest, Smallest = Value }
 
 trait DataLoader {
   def getDataset( collection: String, varName: String ): CDSDataset
   def getVariable( collection: String, varName: String ): CDSVariable
   def getFragment( fragSpec: DataFragmentSpec ): PartitionedFragment
-  def findLargestEnclosingFragSpec(targetFragSpec: DataFragmentSpec): Option[DataFragmentSpec]
+  def findEnclosingFragSpec(targetFragSpec: DataFragmentSpec, selectionCriteria: FragmentSelectionCriteria.Value ): Option[DataFragmentSpec]
   def findEnclosingFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
   def findEnclosedFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
 }
@@ -83,8 +86,7 @@ class DataManager( val dataLoader: DataLoader ) {
 
   def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): PartitionedFragment = {
     val data_source: DataSource = dataContainer.getSource
-    val dataset: CDSDataset = dataLoader.getDataset(data_source.collection, data_source.name)
-    val variable = dataset.loadVariable(data_source.name)
+    val variable = dataLoader.getVariable(data_source.collection, data_source.name)
     val axisSpecs: AxisSpecs = variable.getAxisSpecs( dataContainer.getOpSpecs )
     val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
     uidToSource += ( dataContainer.uid -> new OperationInputSpec( fragmentSpec, axisSpecs )  )
