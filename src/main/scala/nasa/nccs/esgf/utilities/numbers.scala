@@ -60,14 +60,14 @@ class IntNumber( val numvalue: Int ) extends GenericNumber {
   type NumericType = Int
   override def value: NumericType = numvalue
   override def toInt: Int = value
-  override def toFloat: Float = { logger.warn( s"Converting Int $value to Float"); value.toFloat }
-  override def toDouble: Double = { logger.warn( s"Converting Int $value to Double"); value.toDouble }
+  override def toFloat: Float = { value.toFloat }
+  override def toDouble: Double = { value.toDouble }
 }
 
 class FloatNumber( val numvalue: Float ) extends GenericNumber {
   type NumericType = Float
   override def value: NumericType =  numvalue
-  override def toInt: Int = { logger.warn( s"Converting Float $value to Int"); value.toInt }
+  override def toInt: Int = { value.toInt }
   override def toFloat: Float = value
   override def toDouble: Double = value.toDouble
 }
@@ -75,7 +75,7 @@ class FloatNumber( val numvalue: Float ) extends GenericNumber {
 class DoubleNumber( val numvalue: Double ) extends GenericNumber {
   type NumericType = Double
   override def value: NumericType = numvalue
-  override def toInt: Int = { logger.warn( s"Converting Double $value to Int"); value.toInt }
+  override def toInt: Int = { value.toInt }
   override def toFloat: Float = value.toFloat
   override def toDouble: Double = value
 }
@@ -84,8 +84,8 @@ class ShortNumber( val numvalue: Short ) extends GenericNumber {
   type NumericType = Short
   override def value: NumericType = numvalue
   override def toInt: Int = value.toInt
-  override def toFloat: Float = { logger.warn(s"Converting Short $value to Float"); value.toFloat }
-  override def toDouble: Double = { logger.warn(s"Converting Short $value to Double"); value.toDouble }
+  override def toFloat: Float = { value.toFloat }
+  override def toDouble: Double = { value.toDouble }
 }
 
 class UndefinedNumber extends GenericNumber {
