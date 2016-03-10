@@ -144,6 +144,26 @@ class aveSliceAccumulator extends BinSliceAccumulator {
   }
 }
 
+class FastBinnedSliceArray( private val binIndices: Array[Int], private val nbins: Int, val template: Nd4jMaskedTensor )  extends IBinnedSliceArray  {
+  private var refSliceOpt: Option[Nd4jMaskedTensor]  = None
+  private val shape: Array[Int] = template.shape :+ nbins
+  private var valueAccumulator = new Nd4jMaskedTensor(Nd4j.zeros(shape:_*), template.invalid )
+  private var binCounts = Nd4j.zeros(nbins)
+  def nresults = 1
+  def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
+
+  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = {
+    val bin_index = binIndices(binIndex)
+    valueAccumulator[ bin_index ] += values
+  }
+
+  private def getAccumulatorResult( bin_index: Int, result_index: Int ): Nd4jMaskedTensor =
+    _accumulatorArray(bin_index).result(result_index) match {
+      case Some(result_array) => result_array;
+      case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
+    }
+}
+
 
 
 //class aveAccumulator extends BinAccumulator {
