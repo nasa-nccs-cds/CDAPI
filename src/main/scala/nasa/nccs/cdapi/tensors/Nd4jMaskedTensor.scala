@@ -8,6 +8,7 @@ import org.nd4j.linalg.indexing.{NDArrayIndex, INDArrayIndex}
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
+object MissingValueResponse extends Enumeration { val Invalidate, Ignore = Value }
 
 // import org.nd4s.Implicits._
 import scala.collection.immutable.IndexedSeq
@@ -45,23 +46,19 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
     new Nd4jMaskedTensor( tensor.subArray( offsets, newshape, stride ), invalid )
   }
 
+  def slice( slice_index: Int ): Nd4jMaskedTensor = {
+    new Nd4jMaskedTensor( tensor.slice( slice_index ), invalid )
+  }
+
   def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
     assert( dimensions.length > 0, "Must specify at least one dimension ('axes' arg) for this operation")
     val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.exists(_ == x)) None else Some(shape(x)))
-    val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).applyAccumulatorOp(op))): _*)
+    val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
     slices.reshape(filtered_shape :+ op.length: _* )
     new Nd4jMaskedTensor( slices, invalid )
   }
-  def execCombinerOp(op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor): Nd4jMaskedTensor = {
-    val result_array = Nd4j.create( applyCombinerOp( op, maskedArray ), shape )
-    new Nd4jMaskedTensor( result_array, invalid )
-  }
-  def execCombinerOp(op: TensorCombinerOp, value: Float): Nd4jMaskedTensor = {
-    val result_array = Nd4j.create( applyCombinerOp( op, value ), shape )
-    new Nd4jMaskedTensor( result_array, invalid )
-  }
 
-  def execBinningOp( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = {
+  def maskedBin( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = {
     val bins: IBinnedSliceArray = cdsutils.time( logger, "getBinnedArray" ) { binFactory.getBinnedArray }
     (0 until tensor.shape()(dimension)).map( iS => bins.insert( iS, slice( iS, dimension ) ) )
     val result = (0 until bins.nresults).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
@@ -76,7 +73,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
     new Nd4jMaskedTensor( tensor.tensorAlongDimension(index, dimensions:_*), invalid )    // List all varying dimensions, index applied to non-varying dimensions.
   }
 
-  def applyAccumulatorOp( op: TensorAccumulatorOp ): Array[Float] = {
+  def accumulate( op: TensorAccumulatorOp ): Array[Float] = {
     op.init
     ( 0 until tensor.length ).map( iC =>  {
       val v = tensor.getFloat(iC)
@@ -85,82 +82,146 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
     op.result
   }
 
-  def applyCombinerOp( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Array[Float] = {
+  def combine( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
     op.init
     val result = ( 0 until tensor.length ).map( iC => {
       val v0 = tensor.getFloat(iC)
       val v1 = maskedArray.tensor.getFloat(iC)
-      if( (v0 == invalid) || (v1 == maskedArray.invalid) ) invalid else op.combine(v0,v1)
+      op.combine(v0,v1)
     } )
-    result.toArray
+    new Nd4jMaskedTensor( Nd4j.create( result.toArray, shape ), invalid )
   }
 
-  def applyCombinerOp( op: TensorCombinerOp, value: Float ): Array[Float] = {
+  def combine( op: TensorCombinerOp, value: Float ): Nd4jMaskedTensor = {
     op.init
     val result = ( 0 until tensor.length ).map( iC => {
       val v0 = tensor.getFloat(iC)
-      if( v0 == invalid ) invalid else op.combine(v0,value)
+      op.combine(v0,value)
     } )
-    result.toArray
+    new Nd4jMaskedTensor( Nd4j.create( result.toArray, shape ), invalid )
   }
 
-  def applyInPlaceCombinerOp( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Unit = {
+  def accumulate( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
+    op.init
+    val result = ( 0 until tensor.length ).map( iC => {
+      val v0 = tensor.getFloat(iC)
+      val v1 = maskedArray.tensor.getFloat(iC)
+      op.accumulate(v0,v1)
+    } )
+    new Nd4jMaskedTensor( Nd4j.create( result.toArray, shape ), invalid )
+  }
+
+  def accumulate( op: TensorCombinerOp, value: Float ): Nd4jMaskedTensor = {
+    op.init
+    val result = ( 0 until tensor.length ).map( iC => {
+      val v0 = tensor.getFloat(iC)
+      op.accumulate(v0,value)
+    } )
+    new Nd4jMaskedTensor( Nd4j.create( result.toArray, shape ), invalid )
+  }
+
+
+  def icombine( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Unit = {
     op.init
     ( 0 until tensor.length ).map( iC => {
       val v0 = tensor.getFloat(iC)
       val v1 = maskedArray.tensor.getFloat(iC)
-      val result = if( (v0 == invalid) || (v1 == maskedArray.invalid) ) invalid else op.combine(v0,v1)
-//      println( "applyInPlaceCombinerOp[%d]: %f & %f -> %f".format( iC, v0, v1, result) )
+      val result = op.combine(v0,v1)
       tensor.putScalar( iC, result )
     } )
   }
 
-  def applyInPlaceCombinerOp( op: TensorCombinerOp, value: Float ): Unit = {
+  def icombine( op: TensorCombinerOp, value: Float ): Unit = {
     op.init
     ( 0 until tensor.length ).map( iC =>  {
       val v0 = tensor.getFloat(iC)
-      val result = if( v0 == invalid ) invalid else op.combine(v0,value)
+      val result = op.combine(v0,value)
       tensor.putScalar( iC, result )
     } )
   }
 
-  def mean( dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( meanOp, dimensions:_* )
+  def iaccumulate( op: TensorCombinerOp, valuesArray: Nd4jMaskedTensor, countArray: Nd4jMaskedTensor ): Unit = {
+    op.init
+    val nval: Int = tensor.length
+    for( iC <- (0 until nval ); v1 = valuesArray.tensor.getFloat(iC); if(v1 != invalid) ) {
+      val result = op.accumulate( tensor.getFloat(iC), v1)
+      tensor.putScalar(iC, result)
+      countArray.tensor.putScalar( iC, countArray.tensor.getFloat(iC) + 1 )
+    }
+  }
 
-  def bin( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = execBinningOp( dimension, binFactory )
+  def iaccumulate( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Unit = {
+    op.init
+    ( 0 until tensor.length ).map( iC => {
+      val v0 = tensor.getFloat(iC)
+      val v1 = maskedArray.tensor.getFloat(iC)
+      val result = op.accumulate(v0,v1)
+      tensor.putScalar( iC, result )
+    } )
+  }
 
-  def -(array: Nd4jMaskedTensor) = execCombinerOp( subOp, array )
+  def iaccumulate( op: TensorCombinerOp, value: Float ): Unit = {
+    op.init
+    ( 0 until tensor.length ).map( iC =>  {
+      val v0 = tensor.getFloat(iC)
+      val result = op.accumulate(v0,value)
+      tensor.putScalar( iC, result )
+    } )
+  }
 
-  def +(array: Nd4jMaskedTensor) = execCombinerOp( addOp, array )
+  def mean( dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( new meanOp(invalid), dimensions:_* )
 
-  def /(array: Nd4jMaskedTensor) = execCombinerOp( divOp, array )
+  def bin( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = maskedBin( dimension, binFactory )
 
-  def *(array: Nd4jMaskedTensor) = execCombinerOp( multOp, array )
+  def -(array: Nd4jMaskedTensor) = combine( subOp(invalid), array )
 
-  def -(value: Float) = execCombinerOp( subOp, value )
+  def +(array: Nd4jMaskedTensor) = combine( addOp(invalid), array )
 
-  def +(value: Float) = execCombinerOp( addOp, value )
+  def :+(array: Nd4jMaskedTensor) = accumulate( addOp(invalid), array )
 
-  def /(value: Float) = execCombinerOp( divOp, value )
+  def /(array: Nd4jMaskedTensor) = combine( divOp(invalid), array )
 
-  def *(value: Float) = execCombinerOp( multOp, value )
+  def :*(array: Nd4jMaskedTensor) = accumulate( multOp(invalid), array )
 
-  def -=(array: Nd4jMaskedTensor) = applyInPlaceCombinerOp( subOp, array )
+  def -(value: Float) = combine( subOp(invalid), value )
 
-  def +=(array: Nd4jMaskedTensor) = applyInPlaceCombinerOp( addOp, array )
+  def +(value: Float) = combine( addOp(invalid), value )
 
-  def /=(array: Nd4jMaskedTensor) = applyInPlaceCombinerOp( divOp, array )
+  def :+(value: Float) = accumulate( addOp(invalid), value )
 
-  def *=(array: Nd4jMaskedTensor) = applyInPlaceCombinerOp( multOp, array )
+  def /(value: Float) = combine( divOp(invalid), value )
 
-  def -=(value: Float) = applyInPlaceCombinerOp( subOp, value )
+  def *(value: Float) = combine( multOp(invalid), value )
 
-  def +=(value: Float) = applyInPlaceCombinerOp( addOp, value )
+  def :*(value: Float) = accumulate( multOp(invalid), value )
 
-  def /=(value: Float) = applyInPlaceCombinerOp( divOp, value )
+  def -=(array: Nd4jMaskedTensor) = icombine( subOp(invalid), array )
 
-  def *=(value: Float) = applyInPlaceCombinerOp( multOp, value )
+  def +=(array: Nd4jMaskedTensor) = icombine( addOp(invalid), array )
 
-  def rawmean( dimensions: Int* ): Nd4jMaskedTensor =  new Nd4jMaskedTensor( tensor.mean(dimensions:_*), invalid )
+  def :+=(array: Nd4jMaskedTensor) = iaccumulate( addOp(invalid), array )
+
+  def :++=(values: Nd4jMaskedTensor, counts: Nd4jMaskedTensor) = iaccumulate( addOp(invalid), values, counts )
+
+  def /=(array: Nd4jMaskedTensor) = icombine( divOp(invalid), array )
+
+  def *=(array: Nd4jMaskedTensor) = icombine( multOp(invalid), array )
+
+  def :*=(array: Nd4jMaskedTensor) = iaccumulate( multOp(invalid), array )
+
+  def -=(value: Float) = icombine( subOp(invalid), value )
+
+  def +=(value: Float) = icombine( addOp(invalid), value )
+
+  def :+=(value: Float) = iaccumulate( addOp(invalid), value )
+
+  def /=(value: Float) = icombine( divOp(invalid), value )
+
+  def *=(value: Float) = icombine( multOp(invalid), value )
+
+  def :*=(value: Float) = iaccumulate( multOp(invalid), value )
+
+  def rawmean( dimensions: Int* ): Nd4jMaskedTensor = new Nd4jMaskedTensor( tensor.mean(dimensions:_*), invalid )
 
   def apply( ranges: List[INDArrayIndex] ) = {
     val IndArray = tensor.get(ranges: _*)

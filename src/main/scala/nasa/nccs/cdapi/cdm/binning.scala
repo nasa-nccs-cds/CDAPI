@@ -144,27 +144,42 @@ class aveSliceAccumulator extends BinSliceAccumulator {
   }
 }
 
-class FastBinnedSliceArray( private val binIndices: Array[Int], private val nbins: Int, val template: Nd4jMaskedTensor )  extends IBinnedSliceArray  {
-  private var refSliceOpt: Option[Nd4jMaskedTensor]  = None
-  private val shape: Array[Int] = template.shape :+ nbins
-  private var valueAccumulator = new Nd4jMaskedTensor(Nd4j.zeros(shape:_*), template.invalid )
-  private var binCounts = Nd4j.zeros(nbins)
+class FastBinnedSliceArray( private val binIndices: Array[Int], private val nbins: Int )  extends IBinnedSliceArray  {
+  private var _values:  Option[Nd4jMaskedTensor] = None
+  private var _counts: Option[Nd4jMaskedTensor] = None
   def nresults = 1
-  def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
 
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = {
-    val bin_index = binIndices(binIndex)
-    valueAccumulator[ bin_index ] += values
+  private def getBinsArray( template: Nd4jMaskedTensor  ): Nd4jMaskedTensor = {
+    val shape = Array(nbins) ++ template.shape
+    new Nd4jMaskedTensor(Nd4j.zeros(shape:_*), template.invalid )
+  }
+  private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
+    if( _values.isEmpty ) _values = Some( getBinsArray( template ) )
+    _values.get
+  }
+  private def binCounts( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
+    if( _counts == None ) _counts = Some( getBinsArray( template ) )
+    _counts.get
   }
 
-  private def getAccumulatorResult( bin_index: Int, result_index: Int ): Nd4jMaskedTensor =
-    _accumulatorArray(bin_index).result(result_index) match {
-      case Some(result_array) => result_array;
-      case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
-    }
+  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = accumulator(values).slice( binIndices(binIndex) ) :++= ( values, binCounts(values).slice( binIndices(binIndex) ) )
+
+  def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = _values match {
+    case None => Array()
+    case Some( values ) => Array( values / _counts.get )
+  }
+
 }
 
+object binTest extends App {
 
+  val array = new Nd4jMaskedTensor( Nd4j.create( Array.fill[Float](100)(1f), Array(25,2,2)) )
+  val bin_array = (0 until 25).map( _ % 5 ).toArray
+  val binAccumulator = new FastBinnedSliceArray( bin_array, 5 )
+  ( 0 until array.shape(0) ).foreach( index => binAccumulator.insert( index, array.slice(index) ))
+  val result = binAccumulator.result(0)
+  println( result(0).tensor.toString )
+}
 
 //class aveAccumulator extends BinAccumulator {
 //  var _value = 0f
