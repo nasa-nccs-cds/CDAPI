@@ -14,7 +14,6 @@ trait DataLoader {
   def getDataset( collection: String, varName: String ): CDSDataset
   def getVariable( collection: String, varName: String ): CDSVariable
   def getFragment( fragSpec: DataFragmentSpec ): PartitionedFragment
-  def findEnclosingFragSpec(targetFragSpec: DataFragmentSpec, selectionCriteria: FragmentSelectionCriteria.Value ): Option[DataFragmentSpec]
   def findEnclosingFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
   def findEnclosedFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
 }
