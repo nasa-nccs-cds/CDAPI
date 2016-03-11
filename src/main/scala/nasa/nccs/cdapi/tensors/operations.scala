@@ -1,13 +1,13 @@
 package nasa.nccs.cdapi.tensors
 
-abstract class TensorAccumulatorOp( val invalid: Float = Float.NaN ) {
+abstract class TensorAccumulatorOp( val invalid: Float = Float.MaxValue ) {
   def init: Unit
   def insert( value: Float ): Unit
   def result: Array[Float]
   def length: Int
 }
 
-abstract class TensorCombinerOp( val invalid: Float = Float.NaN ) {
+abstract class TensorCombinerOp( val invalid: Float = Float.MaxValue ) {
   def init: Unit = {}
   def combine( value0: Float, value1: Float ): Float
   def accumulate( value0: Float, value1: Float ): Float
@@ -54,7 +54,7 @@ class divOp(invalid: Float) extends TensorCombinerOp(invalid) {
   }
 
   def accumulate( value0: Float, value1: Float ): Float = {
-    if( (value0 == invalid) || (value1 == invalid) ) return invalid
+    if( (value0 == invalid) || (value1 == invalid) || (value1 == 0.0) ) return invalid
     value0 / value1
   }
 }

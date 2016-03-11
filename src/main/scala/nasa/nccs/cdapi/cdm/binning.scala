@@ -145,8 +145,8 @@ class aveSliceAccumulator extends BinSliceAccumulator {
 }
 
 class FastBinnedSliceArray( private val binIndices: Array[Int], private val nbins: Int )  extends IBinnedSliceArray  {
-  private var _values:  Option[Nd4jMaskedTensor] = None
-  private var _counts: Option[Nd4jMaskedTensor] = None
+  var _values:  Option[Nd4jMaskedTensor] = None
+  var _counts: Option[Nd4jMaskedTensor] = None
   def nresults = 1
 
   private def getBinsArray( template: Nd4jMaskedTensor  ): Nd4jMaskedTensor = {
@@ -166,7 +166,7 @@ class FastBinnedSliceArray( private val binIndices: Array[Int], private val nbin
 
   def result( result_index: Int = 0 ): Array[Nd4jMaskedTensor] = _values match {
     case None => Array()
-    case Some( values ) => Array( values / _counts.get )
+    case Some( values ) => Array( values :/ _counts.get )
   }
 
 }
@@ -174,11 +174,15 @@ class FastBinnedSliceArray( private val binIndices: Array[Int], private val nbin
 object binTest extends App {
 
   val array = new Nd4jMaskedTensor( Nd4j.create( Array.fill[Float](100)(1f), Array(25,2,2)) )
+  (0 until 25 by 5).foreach( iC => array.tensor.putScalar( Array(iC,0,0), Float.MaxValue ) )
+  array.tensor.putScalar( Array(0,1,1), Float.MaxValue )
   val bin_array = (0 until 25).map( _ % 5 ).toArray
   val binAccumulator = new FastBinnedSliceArray( bin_array, 5 )
   ( 0 until array.shape(0) ).foreach( index => binAccumulator.insert( index, array.slice(index) ))
   val result = binAccumulator.result(0)
   println( result(0).tensor.toString )
+  println( binAccumulator._values.get.tensor.toString )
+  println( binAccumulator._counts.get.tensor.toString )
 }
 
 //class aveAccumulator extends BinAccumulator {

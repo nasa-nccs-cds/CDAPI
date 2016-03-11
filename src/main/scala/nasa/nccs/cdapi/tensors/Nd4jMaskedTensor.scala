@@ -24,7 +24,7 @@ object Nd4jM {
   }
 }
 
-class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Float = Float.NaN ) extends Serializable {
+class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Float = Float.MaxValue ) extends Serializable {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   val name: String = "Nd4jMaskedTensor"
   val shape = tensor.shape
@@ -181,6 +181,8 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
 
   def /(array: Nd4jMaskedTensor) = combine( divOp(invalid), array )
 
+  def :/(array: Nd4jMaskedTensor) = accumulate( divOp(invalid), array )
+
   def :*(array: Nd4jMaskedTensor) = accumulate( multOp(invalid), array )
 
   def -(value: Float) = combine( subOp(invalid), value )
@@ -190,6 +192,8 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   def :+(value: Float) = accumulate( addOp(invalid), value )
 
   def /(value: Float) = combine( divOp(invalid), value )
+
+  def :/(value: Float) = accumulate( divOp(invalid), value )
 
   def *(value: Float) = combine( multOp(invalid), value )
 
