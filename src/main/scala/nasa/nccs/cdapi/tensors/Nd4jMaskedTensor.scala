@@ -58,11 +58,10 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
     new Nd4jMaskedTensor( slices, invalid )
   }
 
-  def maskedBin( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = {
+  def maskedBin( dimension: Int, binFactory: BinnedArrayFactory ): Option[Nd4jMaskedTensor] = {
     val bins: IBinnedSliceArray = cdsutils.time( logger, "getBinnedArray" ) { binFactory.getBinnedArray }
     (0 until tensor.shape()(dimension)).map( iS => bins.insert( iS, slice( iS, dimension ) ) )
-    val result = (0 until bins.nresults).map( iR => Nd4jM.concat( dimension, bins.result(iR) ) ).toList
-    result
+    bins.result(0)
   }
 
   def dup: Nd4jMaskedTensor = { new Nd4jMaskedTensor( tensor.dup, invalid ) }
@@ -171,7 +170,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
 
   def mean( dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( new meanOp(invalid), dimensions:_* )
 
-  def bin( dimension: Int, binFactory: BinnedArrayFactory ): List[Nd4jMaskedTensor] = maskedBin( dimension, binFactory )
+  def bin( dimension: Int, binFactory: BinnedArrayFactory ): Option[Nd4jMaskedTensor] = maskedBin( dimension, binFactory )
 
   def -(array: Nd4jMaskedTensor) = combine( subOp(invalid), array )
 
