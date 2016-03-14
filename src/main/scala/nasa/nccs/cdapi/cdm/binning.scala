@@ -92,7 +92,7 @@ class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
   protected val _accumulatorArray: IndexedSeq[T] = getAccumArray
     private def getAccumArray: IndexedSeq[T] = cdsutils.time(logger, "BinnedArray:getAccumArray") {
       val ttag = typeTag[T]
-    lazy val ctor = currentMirror.reflectClass(ttag.tpe.typeSymbol.asClass).reflectConstructor(ttag.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq(0).asMethod)
+    lazy val ctor = currentMirror.reflectClass(ttag.tpe.typeSymbol.asClass).reflectConstructor(ttag.tpe.members.filter(m => m.isMethod && m.asMethod.isConstructor).iterator.toSeq.head.asMethod)
     (0 until nbins).map(ival => ctor().asInstanceOf[T])
   }
 }
@@ -114,7 +114,7 @@ class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices
     val bin_index = binIndices(binIndex)
     _accumulatorArray( bin_index ).insert( values )
 //    logger.info( " Insert slice [%s] values = %s into bin %d, accum values = %s ".format(values.shape.mkString(","), values.toDataString,  bin_index, _accumulatorArray( bin_index ).toString ) )
-    if(refSliceOpt == None) refSliceOpt = Some(values)
+    if(refSliceOpt.isEmpty) refSliceOpt = Some(values)
   }
 
   private def getAccumulatorResult( bin_index: Int, result_index: Int ): Nd4jMaskedTensor =
@@ -132,7 +132,7 @@ class aveSliceAccumulator extends BinSliceAccumulator {
   override def toString = _value match { case None => "None"; case Some(mtensor) => "Accumulator{ count = %d, value = %s }".format( _count, mtensor.toDataString ) }
 
   private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
-    if( _value == None ) _value = Some( template.zeros )
+    if( _value.isEmpty ) _value = Some( template.zeros )
     _value.get
   }
 

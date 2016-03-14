@@ -12,7 +12,7 @@ class SectionPartitioner ( val roi: ma2.Section, val nPartitions: Int ) {
     val step = range.length / nPartitions
     val excess = range.length - step*nPartitions
     val first = if(part_index<excess) part_index*(step+1) else excess*(step+1) + (part_index-excess)*step
-    val last = if(part_index<excess) first + (step) else first + step - 1
+    val last = if(part_index<excess) first + step else first + step - 1
     Some( partSection.replaceRange( axis_index, new ma2.Range( first, last) ) )
   }
 

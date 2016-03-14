@@ -33,7 +33,7 @@ class DataManager( val dataLoader: DataLoader ) {
   }
 
   def getBinnedArrayFactory(operation: OperationContainer): Option[BinnedArrayFactory] = {
-    val uid = operation.inputs(0)
+    val uid = operation.inputs.head
     operation.optargs.get("bins") match {
       case None => None
       case Some(binSpec) => Option(BinnedArrayFactory(binSpec, getVariable(uid).dataset))

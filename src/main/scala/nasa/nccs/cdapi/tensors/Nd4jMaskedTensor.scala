@@ -51,8 +51,8 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   }
 
   def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
-    assert( dimensions.length > 0, "Must specify at least one dimension ('axes' arg) for this operation")
-    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.exists(_ == x)) None else Some(shape(x)))
+    assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
+    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.contains(x)) None else Some(shape(x)))
     val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
     slices.reshape(filtered_shape :+ op.length: _* )
     new Nd4jMaskedTensor( slices, invalid )
@@ -60,7 +60,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
 
   def maskedBin( dimension: Int, binFactory: BinnedArrayFactory ): Option[Nd4jMaskedTensor] = {
     val bins: IBinnedSliceArray = cdsutils.time( logger, "getBinnedArray" ) { binFactory.getBinnedArray }
-    (0 until tensor.shape()(dimension)).map( iS => bins.insert( iS, slice( iS, dimension ) ) )
+    (0 until tensor.shape()(dimension)).foreach( iS => bins.insert( iS, slice( iS, dimension ) ) )
     bins.result(0)
   }
 
@@ -74,7 +74,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
 
   def accumulate( op: TensorAccumulatorOp ): Array[Float] = {
     op.init
-    ( 0 until tensor.length ).map( iC =>  {
+    ( 0 until tensor.length ).foreach( iC =>  {
       val v = tensor.getFloat(iC)
       if( v != invalid ) op.insert(v)
     } )
