@@ -24,28 +24,32 @@ class Port( val name: String, val cardinality: String, val description: String, 
   }
 }
 
-class ExecutionResult( val result_data: Array[Float] ) {
+trait ExecutionResult {
+  def toXml: xml.Elem
+}
+
+class BlockingExecutionResult( val result_data: Array[Float] ) extends ExecutionResult {
   def toXml = <result> { result_data.mkString( " ", ",", " " ) } </result>  // cdsutils.cdata(
 }
 
-class ExecutionResults( val results: List[ExecutionResult] ) {
-  def toXml = <execution> {  results.map(_.toXml )  } </execution>
+class AsyncExecutionResult( val results: List[String] )  extends ExecutionResult  {
+  def toXml = <result> {  results.mkString(",")  } </result>
 }
 
 case class ResultManifest( val name: String, val dataset: String, val description: String, val units: String )
 
-class SingleInputExecutionResult( val operation: String, manifest: ResultManifest, result_data: Array[Float] ) extends ExecutionResult(result_data) {
-  val name = manifest.name
-  val description = manifest.description
-  val units = manifest.units
-  val dataset =  manifest.dataset
-
-  override def toXml =
-    <operation id={ operation }>
-      <input name={ name } dataset={ dataset } units={ units } description={ description }  />
-      { super.toXml }
-    </operation>
-}
+//class SingleInputExecutionResult( val operation: String, manifest: ResultManifest, result_data: Array[Float] ) extends ExecutionResult(result_data) {
+//  val name = manifest.name
+//  val description = manifest.description
+//  val units = manifest.units
+//  val dataset =  manifest.dataset
+//
+//  override def toXml =
+//    <operation id={ operation }>
+//      <input name={ name } dataset={ dataset } units={ units } description={ description }  />
+//      { super.toXml }
+//    </operation>
+//}
 
 abstract class DataFragment( array: Nd4jMaskedTensor )  extends Serializable {
   val metaData = new mutable.HashMap[String, String]
@@ -64,7 +68,7 @@ class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
 
-class ExecutionContext( val fragments: List[KernelDataInput], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val args: Map[String, String] ) {
+class ExecutionContext( val fragments: List[KernelDataInput], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val serverConfiguration: Map[String, String], val args: Map[String, String] ) {
 
   def getDomain( domain_id: String ): DomainContainer= {
     domainMap.get(domain_id) match {
@@ -77,6 +81,8 @@ class ExecutionContext( val fragments: List[KernelDataInput], val binArrayOpt: O
 //    dataManager.getSubset( var_uid, getDomain(domain_id) )
 //  }
   def getDataSources: Map[String,OperationInputSpec] = dataManager.getDataSources
+
+  def async: Boolean = args.getOrElse("async", "false").toBoolean
 
   def getFragmentSpec( uid: String ): DataFragmentSpec = dataManager.getOperationInputSpec(uid) match {
     case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
@@ -111,6 +117,10 @@ abstract class Kernel {
       {if (identifier.nonEmpty) <identifier> {identifier} </identifier> }
       {if (metadata.nonEmpty) <metadata> {metadata} </metadata> }
     </kernel>
+  }
+
+  def saveResult( data: Nd4jMaskedTensor): String = {
+    ""
   }
 }
 
