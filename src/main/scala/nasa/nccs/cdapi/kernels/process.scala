@@ -138,7 +138,7 @@ abstract class Kernel {
         resultsDir.mkdirs()
         resultsDir.toPath()
 
-        var fileWriter  = new NetcdfFileWriter()
+ //       var fileWriter  = new NetcdfFileWriter()
 
     }
     ""
