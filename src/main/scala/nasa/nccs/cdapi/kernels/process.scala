@@ -4,6 +4,8 @@ import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import nasa.nccs.cdapi.cdm._
 import nasa.nccs.esgf.process._
 import org.slf4j.LoggerFactory
+import java.io.File
+import ucar.nc2.NetcdfFileWriter
 
 import scala.collection.mutable
 
@@ -33,7 +35,12 @@ class BlockingExecutionResult( val result_data: Array[Float] ) extends Execution
 }
 
 class AsyncExecutionResult( val results: List[String] )  extends ExecutionResult  {
+  def this( result: String  ) { this( List(result) ) }
   def toXml = <result> {  results.mkString(",")  } </result>
+}
+
+class ExecutionResults( val results: List[ExecutionResult] ) {
+  def toXml = <results> { results.foreach(_.toXml) } </results>
 }
 
 case class ResultManifest( val name: String, val dataset: String, val description: String, val units: String )
@@ -119,7 +126,21 @@ abstract class Kernel {
     </kernel>
   }
 
-  def saveResult( data: Nd4jMaskedTensor): String = {
+  def saveResult( data: Nd4jMaskedTensor, context: ExecutionContext): String = {
+    ""
+  }
+  def saveResult( data: PartitionedFragment, context: ExecutionContext ): String = {
+    context.args.get("resultId") match {
+      case None => logger.warn( "Missing resultId: can't save result")
+      case Some(resultId) =>
+        val resultsDirPath = context.serverConfiguration.getOrElse( "wps.results.dir", "~/.wps/results" )
+        val resultsDir = new File( resultsDirPath )
+        resultsDir.mkdirs()
+        resultsDir.toPath()
+
+        var fileWriter  = new NetcdfFileWriter()
+
+    }
     ""
   }
 }
