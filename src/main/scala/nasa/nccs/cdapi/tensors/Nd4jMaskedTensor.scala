@@ -39,10 +39,18 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
 
   def masked( tensor: INDArray ) = new Nd4jMaskedTensor( tensor, invalid )
 
+  private def compute_stride( shape: Array[Int]): Array[Int] = {
+    var accumulator = 1
+    val max_val = shape.length - 1
+    val reversed_strides = ( max_val to 0 by -1 ).map { index => if( index == max_val ) 1 else { accumulator *= shape(index+1); accumulator } }
+    reversed_strides.reverse.toArray
+  }
+
   def slice( slice_index: Int, dimension: Int ): Nd4jMaskedTensor = {
     val offsets = Array.fill[Int](shape.length)(0).updated(dimension,slice_index)
-    val stride = Array.fill[Int](shape.length)(1)
     val newshape = shape.updated(dimension,1)
+    val stride = compute_stride( newshape )
+    println( "New MaskedTensor, offsets = [%s], stride = [%s], newshape = [%s]".format( offsets.mkString(","), stride.mkString(","), newshape.mkString(",") ) )
     new Nd4jMaskedTensor( tensor.subArray( offsets, newshape, stride ), invalid )
   }
 

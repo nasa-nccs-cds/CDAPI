@@ -40,7 +40,7 @@ class AsyncExecutionResult( val results: List[String] )  extends ExecutionResult
 }
 
 class ExecutionResults( val results: List[ExecutionResult] ) {
-  def toXml = <results> { results.foreach(_.toXml) } </results>
+  def toXml = <results> { results.map(_.toXml) } </results>
 }
 
 case class ResultManifest( val name: String, val dataset: String, val description: String, val units: String )
