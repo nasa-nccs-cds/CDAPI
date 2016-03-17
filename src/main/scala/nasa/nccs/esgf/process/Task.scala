@@ -191,9 +191,18 @@ class DataSource( val name: String, val collection: String, val domain: String )
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
 }
 
-class DataFragmentSpec( val varname: String, val collection: String, val roi: ma2.Section, val partitions: PartitionSpec* )  {
+class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val roi: ma2.Section = new ma2.Section(), val partitions: Array[PartitionSpec]= Array() )  {
   override def toString =  "DataFragmentSpec { varname = %s, collection = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, roi.toString, partitions.map(_.toString).mkString(", "))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
+
+  def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec = {
+    val newSection = roi.intersect(cutSection).shiftOrigin(roi)
+    new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
+  }
+
+  def newSection( newSection: ma2.Section ): DataFragmentSpec = {
+    new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
+  }
 
 //  private var dataFrag: Option[PartitionedFragment] = None
   //  def setData( fragment: PartitionedFragment ) = { assert( dataFrag == None, "Overwriting Data Fragment in " + toString ); dataFrag = Option(fragment) }

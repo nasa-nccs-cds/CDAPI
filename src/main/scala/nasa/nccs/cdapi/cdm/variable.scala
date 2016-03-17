@@ -150,7 +150,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
       assert(partAxisIndex != -1, "CDS2-CDSVariable: Can't find axis %s in variable %s".format(partitionAxis.getShortName, ncVariable.getNameAndDimensions))
       List( new PartitionSpec(partAxisIndex, nPart, partIndex) )
     }
-    new DataFragmentSpec( name, dataset.name, getSubSection(roi), partitions:_* )
+    new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), getSubSection(roi), partitions.toArray )
   }
 
   def loadPartition( fragmentSpec : DataFragmentSpec, axisConf: List[OperationSpecs] ): PartitionedFragment = {
@@ -170,6 +170,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   def loadRoi( fragmentSpec: DataFragmentSpec ): PartitionedFragment = {
     val array = ncVariable.read(fragmentSpec.roi)
     val ndArray: INDArray = getNDArray(array)
+//    ncVariable.getDimensions.foreach( dim => println( "Dimension %s: %s ".format( dim.getShortName,  dim.writeCDL(true) )))
     createPartitionedFragment( fragmentSpec, ndArray )
   }
 
@@ -189,7 +190,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   }
 
   def createPartitionedFragment( fragmentSpec: DataFragmentSpec, ndArray: INDArray ): PartitionedFragment =  {
-    new PartitionedFragment(new Nd4jMaskedTensor(ndArray, missing), fragmentSpec.roi)
+    new PartitionedFragment(new Nd4jMaskedTensor(ndArray, missing), fragmentSpec )
   }
 
 }
@@ -198,30 +199,30 @@ object PartitionedFragment {
   def sectionToIndices( section: ma2.Section ): List[INDArrayIndex] = section.getRanges.map(range => NDArrayIndex.interval( range.first, range.last+1 ) ).toList
 }
 
-class PartitionedFragment( array: Nd4jMaskedTensor, val roiSection: ma2.Section, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {
+class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragmentSpec, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {
   val LOG = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def this() = this( new Nd4jMaskedTensor, new ma2.Section )
+  def this() = this( new Nd4jMaskedTensor, new DataFragmentSpec )
 
-  override def toString = { "PartitionedFragment: shape = %s, section = %s".format( array.shape.toString, roiSection.toString ) }
+  override def toString = { "PartitionedFragment: shape = %s, section = %s".format( array.shape.toString, fragmentSpec.roi.toString ) }
 
   def cutIntersection( cutSection: ma2.Section, copy: Boolean = true ): PartitionedFragment = {
-    val newSection = roiSection.intersect( cutSection ).shiftOrigin( roiSection )
-    val indices = PartitionedFragment.sectionToIndices(newSection)
+    val newFragSpec = fragmentSpec.cutIntersection(cutSection)
+    val indices = PartitionedFragment.sectionToIndices( newFragSpec.roi )
     val newDataArray: Nd4jMaskedTensor = array( indices )
-    new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection )
+    new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newFragSpec )
   }
 
   def cutNewSubset( newSection: ma2.Section, copy: Boolean = true ): PartitionedFragment = {
-    if (roiSection.equals( newSection )) this
+    if (fragmentSpec.roi.equals( newSection )) this
     else {
-      val relativeSection = newSection.shiftOrigin( roiSection )
+      val relativeSection = newSection.shiftOrigin( fragmentSpec.roi )
       val newDataArray: Nd4jMaskedTensor = array( PartitionedFragment.sectionToIndices(relativeSection) )
-      new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newSection )
+      new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, fragmentSpec.newSection( newSection ) )
     }
   }
-  def size: Long = roiSection.computeSize
-  def contains( requestedSection: ma2.Section ): Boolean = roiSection.contains( requestedSection )
+  def size: Long = fragmentSpec.roi.computeSize
+  def contains( requestedSection: ma2.Section ): Boolean = fragmentSpec.roi.contains( requestedSection )
 }
 
 object sectionTest extends App {

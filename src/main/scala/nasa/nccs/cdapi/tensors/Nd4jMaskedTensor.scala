@@ -29,34 +29,36 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   val name: String = "Nd4jMaskedTensor"
   val shape = tensor.shape
 
-  override def toString =  "%s[%s]".format( name, shape.mkString(",") )
+  override def toString = "%s[%s]".format(name, shape.mkString(","))
+
   def rows = tensor.rows
+
   def cols = tensor.columns
+
   def data: Array[Float] = tensor.data.asFloat
-  def toRawDataString = data.mkString("[ ",", "," ]")
+
+  def toRawDataString = data.mkString("[ ", ", ", " ]")
+
   def toDataString = tensor.toString
- // def apply( indices: Int*): Float = tensor.getFloat( indices )
 
-  def masked( tensor: INDArray ) = new Nd4jMaskedTensor( tensor, invalid )
+  // def apply( indices: Int*): Float = tensor.getFloat( indices )
 
-  private def compute_stride( shape: Array[Int]): Array[Int] = {
-    var accumulator = 1
-    val max_val = shape.length - 1
-    val reversed_strides = ( max_val to 0 by -1 ).map { index => if( index == max_val ) 1 else { accumulator *= shape(index+1); accumulator } }
+  def masked(tensor: INDArray) = new Nd4jMaskedTensor(tensor, invalid)
+
+  private def compute_stride(shape: Array[Int]): Array[Int] = {
+    var accumulator = 1; val max_val = shape.length - 1
+    val reversed_strides = (max_val to 0 by -1).map { index => if (index == max_val) 1 else { accumulator *= shape(index + 1); accumulator } }
     reversed_strides.reverse.toArray
   }
 
-  def slice( slice_index: Int, dimension: Int ): Nd4jMaskedTensor = {
-    val offsets = Array.fill[Int](shape.length)(0).updated(dimension,slice_index)
-    val newshape = shape.updated(dimension,1)
-    val stride = compute_stride( newshape )
-    println( "New MaskedTensor, offsets = [%s], stride = [%s], newshape = [%s]".format( offsets.mkString(","), stride.mkString(","), newshape.mkString(",") ) )
-    new Nd4jMaskedTensor( tensor.subArray( offsets, newshape, stride ), invalid )
+  def dataslice(slice_index: Int, dimension: Int = 0): INDArray = {
+    val offsets = Array.fill[Int](shape.length)(0).updated(dimension, slice_index)
+    val newshape = shape.updated(dimension, 1)
+    val stride = compute_stride(newshape)
+    tensor.subArray(offsets, newshape, stride)
   }
 
-  def slice( slice_index: Int ): Nd4jMaskedTensor = {
-    new Nd4jMaskedTensor( tensor.slice( slice_index ), invalid )
-  }
+  def slice( slice_index: Int, dimension: Int = 0 ): Nd4jMaskedTensor = new Nd4jMaskedTensor( dataslice(slice_index,dimension), invalid )
 
   def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
     assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
