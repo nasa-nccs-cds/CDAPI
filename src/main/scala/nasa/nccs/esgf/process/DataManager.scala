@@ -44,9 +44,13 @@ class DataManager( val dataLoader: DataLoader ) {
     throw new Exception("Can't find Variable '%s' in uids: [ %s ]".format(uid, uidToSource.keySet.mkString(", ")))
   }
 
+  def getVariable(collection: String, varname: String ): CDSVariable = dataLoader.getVariable( collection, varname )
+
+  def getDataset(collection: String, varname: String ): CDSDataset = dataLoader.getDataset( collection, varname )
+
   def getVariable(uid: String): CDSVariable = {
     uidToSource.get(uid) match {
-      case Some(inputSpec) => dataLoader.getVariable( inputSpec.data.collection, inputSpec.data.varname )
+      case Some(inputSpec) => getVariable( inputSpec.data.collection, inputSpec.data.varname )
       case None => missing_variable(uid)
     }
   }

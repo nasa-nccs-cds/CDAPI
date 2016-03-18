@@ -52,7 +52,7 @@ object CDSDataset {
 }
 
 class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDataset, val coordSystem: CoordinateSystem ) {
-  val attributes = ncDataset.getGlobalAttributes
+  val attributes = Map( ncDataset.getGlobalAttributes.map( a => ( a.getFullName -> a.getStringValue ) ):_* )
   val coordAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
 
   def getCoordinateAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList

@@ -1,10 +1,10 @@
 package nasa.nccs.esgf.process
 
-import nasa.nccs.cdapi.cdm.PartitionedFragment
+import nasa.nccs.cdapi.cdm.{CDSDataset, CDSVariable, PartitionedFragment}
 import ucar.ma2
 
 import scala.util.matching.Regex
-import scala.collection.{mutable, immutable}
+import scala.collection.{immutable, mutable}
 import scala.collection.mutable.HashSet
 import scala.xml._
 import mutable.ListBuffer
@@ -200,7 +200,23 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
     new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
   }
 
-  def newSection( newSection: ma2.Section ): DataFragmentSpec = {
+  def getVariableMetadata(dataManager: DataManager): Map[String,String] = {
+    var v: CDSVariable =  dataManager.getVariable( collection, varname )
+    Map( "description" -> v.description, "units"->v.units, "fullname"->v.fullname, "axes" -> dimensions, "varname" -> varname, "collection" -> collection ) ++ v.attributes.mapValues( _.toString )
+  }
+
+  def getDatasetMetadata(dataManager: DataManager): Map[String,String] = {
+    var dset: CDSDataset = dataManager.getDataset( collection, varname )
+    dset.attributes
+  }
+
+  def reduceSection( dimensions: Int*  ): DataFragmentSpec = {
+    var newSection = roi;
+    for(  dim: Int <- dimensions ) { newSection = newSection.setRange( dim, new ma2.Range(0,0,1) ) }
+    reSection( newSection )
+  }
+
+  def reSection( newSection: ma2.Section ): DataFragmentSpec = {
     new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
   }
 

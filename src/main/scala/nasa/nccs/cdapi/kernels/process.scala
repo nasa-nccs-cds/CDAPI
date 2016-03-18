@@ -4,9 +4,12 @@ import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import nasa.nccs.cdapi.cdm._
 import nasa.nccs.esgf.process._
 import org.slf4j.LoggerFactory
-import java.io.File
-import ucar.nc2.NetcdfFileWriter
+import java.io.{File, IOException}
 
+import ucar.{ma2, nc2}
+
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 object Port {
@@ -35,7 +38,7 @@ class BlockingExecutionResult( val result_data: Array[Float] ) extends Execution
 }
 
 class AsyncExecutionResult( val results: List[String] )  extends ExecutionResult  {
-  def this( result: String  ) { this( List(result) ) }
+  def this( resultOpt: Option[String]  ) { this( resultOpt.toList ) }
   def toXml = <result> {  results.mkString(",")  } </result>
 }
 
@@ -58,7 +61,7 @@ case class ResultManifest( val name: String, val dataset: String, val descriptio
 //    </operation>
 //}
 
-abstract class DataFragment( array: Nd4jMaskedTensor )  extends Serializable {
+abstract class DataFragment( private val array: Nd4jMaskedTensor )  extends Serializable {
   val metaData = new mutable.HashMap[String, String]
 
   def this( array: Nd4jMaskedTensor, metaDataVar: (String, String)* ) {
@@ -126,22 +129,34 @@ abstract class Kernel {
     </kernel>
   }
 
-  def saveResult( data: Nd4jMaskedTensor, context: ExecutionContext): String = {
-    ""
-  }
-  def saveResult( data: PartitionedFragment, context: ExecutionContext ): String = {
-    context.args.get("resultId") match {
-      case None => logger.warn( "Missing resultId: can't save result")
-      case Some(resultId) =>
-        val resultsDirPath = context.serverConfiguration.getOrElse( "wps.results.dir", "~/.wps/results" )
-        val resultsDir = new File( resultsDirPath )
-        resultsDir.mkdirs()
-        resultsDir.toPath()
-
- //       var fileWriter  = new NetcdfFileWriter()
-
+  def saveResult( data: Nd4jMaskedTensor, context: ExecutionContext, varMetadata: Map[String,String], dsetMetadata: Map[String,String] ): Option[String] = {
+    varMetadata.get("axes") match {
+      case None => logger.error("Can't write NetCDF data without axis information")
+      case Some(axisString) =>
+        val axes = axisString.split(' ')
+        context.args.get("resultId") match {
+          case None => logger.warn("Missing resultId: can't save result")
+          case Some(resultId) =>
+            val resultsDirPath = context.serverConfiguration.getOrElse("wps.results.dir", "~/.wps/results")
+            val resultsDir = new File(resultsDirPath)
+            resultsDir.mkdirs()
+            val filePath = resultsDirPath + s"/$resultId.nc"
+            val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, filePath)
+            assert(axes.length == data.shape.length, "Axes not the same length as data shape in saveResult")
+            val dims: IndexedSeq[nc2.Dimension] = for (idim <- (0 until axes.length); axis = axes(idim); size = data.shape(idim)) yield writer.addDimension(null, axis, size)
+            val variable: nc2.Variable = writer.addVariable(null, data.name, ma2.DataType.FLOAT, dims.toList)
+            varMetadata.keys.foreach { case key: String =>   variable.addAttribute(new nc2.Attribute(key, varMetadata.getOrElse(key,""))) }
+            dsetMetadata.keys.foreach { case key: String =>  writer.addGroupAttribute(null, new nc2.Attribute( key, dsetMetadata.getOrElse(key,"") ) ) }
+            try {
+              writer.create()
+              writer.close()
+              Some(resultId)
+            } catch {
+              case e: IOException => logger.error("ERROR creating file %s%n%s".format(filePath, e.getMessage()))
+            }
+        }
     }
-    ""
+    None
   }
 }
 

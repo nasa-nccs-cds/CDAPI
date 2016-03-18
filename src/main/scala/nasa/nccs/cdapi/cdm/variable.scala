@@ -19,7 +19,10 @@ import scala.collection.concurrent
 
 object BoundsRole extends Enumeration { val Start, End = Value }
 
-class KernelDataInput( val dataFragment: PartitionedFragment, val axisSpecs: AxisSpecs ) {}
+class KernelDataInput( val dataFragment: PartitionedFragment, val axisSpecs: AxisSpecs ) {
+  def getVariableMetadata(dataManager: DataManager): Map[String,String] =  dataFragment.getVariableMetadata(dataManager)
+  def getDatasetMetadata(dataManager: DataManager): Map[String,String] =  dataFragment.getDatasetMetadata(dataManager)
+}
 
 object CDSVariable { }
 
@@ -204,6 +207,13 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragme
 
   def this() = this( new Nd4jMaskedTensor, new DataFragmentSpec )
 
+  def getVariableMetadata(dataManager: DataManager): Map[String,String] = {
+    Map( metaDataVar:_* ) ++ fragmentSpec.getVariableMetadata(dataManager)
+  }
+  def getDatasetMetadata(dataManager: DataManager): Map[String,String] = {
+    fragmentSpec.getDatasetMetadata(dataManager)
+  }
+
   override def toString = { "PartitionedFragment: shape = %s, section = %s".format( array.shape.toString, fragmentSpec.roi.toString ) }
 
   def cutIntersection( cutSection: ma2.Section, copy: Boolean = true ): PartitionedFragment = {
@@ -218,7 +228,7 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragme
     else {
       val relativeSection = newSection.shiftOrigin( fragmentSpec.roi )
       val newDataArray: Nd4jMaskedTensor = array( PartitionedFragment.sectionToIndices(relativeSection) )
-      new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, fragmentSpec.newSection( newSection ) )
+      new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, fragmentSpec.reSection( newSection ) )
     }
   }
   def size: Long = fragmentSpec.roi.computeSize
