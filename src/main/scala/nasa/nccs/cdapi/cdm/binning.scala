@@ -30,32 +30,32 @@ trait BinSliceAccumulator {
 }
 
 object BinnedArrayFactory {
-  def apply( binSpec: String, dataset: CDSDataset ) = {
+  def apply( binSpec: String, variable: CDSVariable ) = {
     val binSpecs = binSpec.split('|')
     val axis = binSpecs(0).toLowerCase.trim.head
     val step = binSpecs(1).toLowerCase.trim
     val reducer = if (binSpecs.length > 2) binSpecs(2).toLowerCase.trim else "ave"
     val cycle = if (binSpecs.length > 3) binSpecs(3).toLowerCase.trim else ""
-    new BinnedArrayFactory( axis, step, reducer, cycle, dataset )
+    new BinnedArrayFactory( axis, step, reducer, cycle, variable )
   }
 }
 
-class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String, val cycle: String, dataset: CDSDataset ) {
+class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String, val cycle: String, variable: CDSVariable ) {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   private case class SliceArraySpec( nBins: Int, binIndices: Array[Int]  )
-
-  lazy val coordinateAxis: CoordinateAxis1D = dataset.getCoordinateAxis( axis ) match {
+  lazy val dimension: Int = variable.getAxisIndex( axis )
+  lazy val coordinateAxis: CoordinateAxis1D = variable.dataset.getCoordinateAxis( axis ) match {
     case caxis: CoordinateAxis1D => caxis;
     case x => throw new Exception("Coordinate Axis type %s can't currently be binned".format(x.getClass.getName))
   }
-  lazy val timeAxis: CoordinateAxis1DTime = CoordinateAxis1DTime.factory(dataset.ncDataset, coordinateAxis, new Formatter())
+  lazy val timeAxis: CoordinateAxis1DTime = CoordinateAxis1DTime.factory(variable.dataset.ncDataset, coordinateAxis, new Formatter())
 
   private def createArrayInstance( sliceArraySpec: SliceArraySpec ): IBinnedSliceArray = {
     reducer match {
       case "ave" =>
         val binIndices = sliceArraySpec.binIndices
         val nBins = sliceArraySpec.nBins
-        cdsutils.time( logger, "new BinnedSliceArray" ) { new BinnedAveSliceArray( binIndices, nBins ) }
+        cdsutils.time( logger, "new BinnedSliceArray" ) { new BinnedAveSliceArray( binIndices, nBins, dimension ) }
       case x => throw new Exception("Binning not yet implemented for this reducer type: %s".format(reducer))
     }
   }
@@ -147,16 +147,16 @@ class aveSliceAccumulator extends BinSliceAccumulator {
   }
 }
 
-class BinnedAveSliceArray( private val binIndices: Array[Int], private val nbins: Int )  extends IBinnedSliceArray  {
+class BinnedAveSliceArray( private val binIndices: Array[Int], private val nbins: Int, val dimension: Int )  extends IBinnedSliceArray  {
   var _values:  Option[Nd4jMaskedTensor] = None
   var _counts: Option[Nd4jMaskedTensor] = None
   def nresults = 1
-  private def getBinsArray( template: Nd4jMaskedTensor  ): Nd4jMaskedTensor = new Nd4jMaskedTensor( Nd4j.zeros(Array(nbins) ++ template.shape: _* ), template.invalid )
+  private def getBinsArray( template: Nd4jMaskedTensor  ): Nd4jMaskedTensor = new Nd4jMaskedTensor( Nd4j.zeros( template.shape.updated(dimension,nbins): _* ), template.invalid )
   private def initValues( template: Nd4jMaskedTensor ):  Unit = { if( _values.isEmpty ) _values = Some( getBinsArray( template ) ) }
   private def initCounter( template: Nd4jMaskedTensor ): Unit = { if( _counts.isEmpty ) _counts = Some( getBinsArray( template ) ) }
   private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = { initValues(template); _values.get }
   private def binCounts( template: Nd4jMaskedTensor ):   Nd4jMaskedTensor =  { initCounter(template); _counts.get }
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = accumulator(values).slice( binIndices(binIndex) ) :++= ( values, binCounts(values).slice( binIndices(binIndex) ) )
+  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit =  accumulator(values).slice( binIndices(binIndex), dimension ) :++= ( values, binCounts(values).slice( binIndices(binIndex), dimension ) )
   def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor] = result_index match { case 0 => _values match { case None => None; case Some( values ) => Some(values :/ _counts.get) }; case x => None }
 }
 
