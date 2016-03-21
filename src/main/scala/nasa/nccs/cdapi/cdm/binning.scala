@@ -156,8 +156,16 @@ class BinnedAveSliceArray( private val binIndices: Array[Int], private val nbins
   private def initCounter( template: Nd4jMaskedTensor ): Unit = { if( _counts.isEmpty ) _counts = Some( getBinsArray( template ) ) }
   private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = { initValues(template); _values.get }
   private def binCounts( template: Nd4jMaskedTensor ):   Nd4jMaskedTensor =  { initCounter(template); _counts.get }
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit =  accumulator(values).slice( binIndices(binIndex), dimension ) :++= ( values, binCounts(values).slice( binIndices(binIndex), dimension ) )
-  def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor] = result_index match { case 0 => _values match { case None => None; case Some( values ) => Some(values :/ _counts.get) }; case x => None }
+
+  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit =
+    accumulator(values).slice( binIndices(binIndex), dimension ) :++= ( values, binCounts(values).slice( binIndices(binIndex), dimension ) )
+
+  def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor] = result_index match {
+    case 0 => _values match {
+      case None => None;
+      case Some( values ) => Some(values :/ _counts.get) };
+    case x => None
+  }
 }
 
 //object binTest extends App {

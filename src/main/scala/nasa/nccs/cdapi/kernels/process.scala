@@ -129,27 +129,41 @@ abstract class Kernel {
     </kernel>
   }
 
-  def saveResult( data: Nd4jMaskedTensor, context: ExecutionContext, varMetadata: Map[String,String], dsetMetadata: Map[String,String] ): Option[String] = {
+  def searchForValue( metadata: Map[String,nc2.Attribute], keys: List[String], default_val: String ) : String = {
+    keys.length match {
+      case 0 => default_val
+      case x => metadata.get(keys.head) match {
+        case Some(valueAttr) => valueAttr.getStringValue()
+        case None => searchForValue(metadata, keys.tail, default_val)
+      }
+    }
+  }
+
+  def saveResult( maskedTensor: Nd4jMaskedTensor, context: ExecutionContext, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
     varMetadata.get("axes") match {
       case None => logger.error("Can't write NetCDF data without axis information")
-      case Some(axisString) =>
-        val axes = axisString.split(' ')
+      case Some(axisAttr) =>
+        val axes = axisAttr.getStringValue(0).split(' ')
         context.args.get("resultId") match {
           case None => logger.warn("Missing resultId: can't save result")
           case Some(resultId) =>
-            val resultsDirPath = context.serverConfiguration.getOrElse("wps.results.dir", "~/.wps/results")
+            val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
+            val resultsDirPath = context.serverConfiguration.getOrElse("wps.results.dir", System.getProperty("user.home") + "/.wps/results")
             val resultsDir = new File(resultsDirPath)
             resultsDir.mkdirs()
             val filePath = resultsDirPath + s"/$resultId.nc"
             val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, filePath)
-            assert(axes.length == data.shape.length, "Axes not the same length as data shape in saveResult")
-            val dims: IndexedSeq[nc2.Dimension] = for (idim <- (0 until axes.length); axis = axes(idim); size = data.shape(idim)) yield writer.addDimension(null, axis, size)
-            val variable: nc2.Variable = writer.addVariable(null, data.name, ma2.DataType.FLOAT, dims.toList)
-            varMetadata.keys.foreach { case key: String =>   variable.addAttribute(new nc2.Attribute(key, varMetadata.getOrElse(key,""))) }
-            dsetMetadata.keys.foreach { case key: String =>  writer.addGroupAttribute(null, new nc2.Attribute( key, dsetMetadata.getOrElse(key,"") ) ) }
+            assert(axes.length == maskedTensor.shape.length, "Axes not the same length as data shape in saveResult")
+            val dims: IndexedSeq[nc2.Dimension] = for (idim <- (0 until axes.length); axis = axes(idim); size = maskedTensor.shape(idim)) yield writer.addDimension(null, axis, size)
+            val variable: nc2.Variable = writer.addVariable(null, varname, ma2.DataType.FLOAT, dims.toList)
+            varMetadata.values.foreach( attr => variable.addAttribute(attr) )
+            variable.addAttribute( new nc2.Attribute( "missing_value", maskedTensor.invalid ) )
+            dsetMetadata.foreach( attr => writer.addGroupAttribute(null, attr ) )
             try {
               writer.create()
+              writer.write( variable, maskedTensor.ma2Data )
               writer.close()
+              println( "Writing result %s to file '%s'".format(resultId,filePath) )
               Some(resultId)
             } catch {
               case e: IOException => logger.error("ERROR creating file %s%n%s".format(filePath, e.getMessage()))

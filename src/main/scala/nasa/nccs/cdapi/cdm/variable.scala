@@ -10,8 +10,11 @@ import org.nd4j.linalg.indexing.{INDArrayIndex, NDArrayIndex}
 import ucar.nc2.time.{CalendarDate, CalendarDateRange}
 import nasa.nccs.esgf.process._
 import ucar.{ma2, nc2}
-import ucar.nc2.dataset.{CoordinateAxis, CoordinateAxis1D, CoordinateSystem, CoordinateAxis1DTime}
+import ucar.nc2.dataset.{CoordinateAxis, CoordinateAxis1D, CoordinateAxis1DTime, CoordinateSystem}
 import java.util.concurrent.atomic.AtomicReference
+
+import ucar.nc2.Attribute
+
 import scala.collection.JavaConversions._
 // import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -20,8 +23,8 @@ import scala.collection.concurrent
 object BoundsRole extends Enumeration { val Start, End = Value }
 
 class KernelDataInput( val dataFragment: PartitionedFragment, val axisSpecs: AxisSpecs ) {
-  def getVariableMetadata(dataManager: DataManager): Map[String,String] =  dataFragment.getVariableMetadata(dataManager)
-  def getDatasetMetadata(dataManager: DataManager): Map[String,String] =  dataFragment.getDatasetMetadata(dataManager)
+  def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] =  dataFragment.getVariableMetadata(dataManager)
+  def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] =  dataFragment.getDatasetMetadata(dataManager)
 }
 
 object CDSVariable { }
@@ -207,10 +210,10 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragme
 
   def this() = this( new Nd4jMaskedTensor, new DataFragmentSpec )
 
-  def getVariableMetadata(dataManager: DataManager): Map[String,String] = {
-    Map( metaDataVar:_* ) ++ fragmentSpec.getVariableMetadata(dataManager)
+  def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] = {
+    fragmentSpec.getVariableMetadata(dataManager) ++ Map( metaDataVar.map( item => (item._1 -> new Attribute(item._1,item._2)) ) :_* )
   }
-  def getDatasetMetadata(dataManager: DataManager): Map[String,String] = {
+  def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] = {
     fragmentSpec.getDatasetMetadata(dataManager)
   }
 

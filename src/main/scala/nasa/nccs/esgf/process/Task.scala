@@ -1,7 +1,7 @@
 package nasa.nccs.esgf.process
 
 import nasa.nccs.cdapi.cdm.{CDSDataset, CDSVariable, PartitionedFragment}
-import ucar.ma2
+import ucar.{ma2, nc2}
 
 import scala.util.matching.Regex
 import scala.collection.{immutable, mutable}
@@ -200,12 +200,14 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
     new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
   }
 
-  def getVariableMetadata(dataManager: DataManager): Map[String,String] = {
+  def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] = {
     var v: CDSVariable =  dataManager.getVariable( collection, varname )
-    Map( "description" -> v.description, "units"->v.units, "fullname"->v.fullname, "axes" -> dimensions, "varname" -> varname, "collection" -> collection ) ++ v.attributes.mapValues( _.toString )
+    v.attributes ++ Map( "description" -> new nc2.Attribute("description",v.description), "units"->new nc2.Attribute("units",v.units),
+      "fullname"->new nc2.Attribute("fullname",v.fullname), "axes" -> new nc2.Attribute("axes",dimensions),
+      "varname" -> new nc2.Attribute("varname",varname), "collection" -> new nc2.Attribute("collection",collection) )
   }
 
-  def getDatasetMetadata(dataManager: DataManager): Map[String,String] = {
+  def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] = {
     var dset: CDSDataset = dataManager.getDataset( collection, varname )
     dset.attributes
   }

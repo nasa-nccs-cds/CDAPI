@@ -5,6 +5,7 @@ import nasa.nccs.utilities.cdsutils
 import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.factory.Nd4j
 import org.nd4j.linalg.indexing.{NDArrayIndex, INDArrayIndex}
+import ucar.ma2
 import scala.reflect.runtime._
 import scala.reflect.runtime.universe._
 
@@ -36,6 +37,8 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   def cols = tensor.columns
 
   def data: Array[Float] = tensor.data.asFloat
+
+  def ma2Data: ma2.Array = ma2.Array.factory( ma2.DataType.FLOAT, shape, tensor.data.asFloat )
 
   def toRawDataString = data.mkString("[ ", ", ", " ]")
 

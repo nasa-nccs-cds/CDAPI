@@ -4,8 +4,10 @@ import java.nio.channels.NonReadableChannelException
 
 import nasa.nccs.esgf.process.DomainAxis
 import nasa.nccs.cdapi.cdm
+import ucar.nc2
 import ucar.nc2.constants.AxisType
-import ucar.nc2.dataset.{ NetcdfDataset, CoordinateSystem, CoordinateAxis }
+import ucar.nc2.dataset.{CoordinateAxis, CoordinateSystem, NetcdfDataset}
+
 import scala.collection.mutable
 import scala.collection.concurrent
 import scala.collection.JavaConversions._
@@ -52,7 +54,7 @@ object CDSDataset {
 }
 
 class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDataset, val coordSystem: CoordinateSystem ) {
-  val attributes = Map( ncDataset.getGlobalAttributes.map( a => ( a.getFullName -> a.getStringValue ) ):_* )
+  val attributes: List[nc2.Attribute] = ncDataset.getGlobalAttributes.map( a => { new nc2.Attribute( name + "--" + a.getFullName, a ) } ).toList
   val coordAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
 
   def getCoordinateAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
