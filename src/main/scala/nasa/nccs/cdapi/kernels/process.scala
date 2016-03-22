@@ -102,6 +102,16 @@ class ExecutionContext( val fragments: List[KernelDataInput], val binArrayOpt: O
   def getAxisSpecs( uid: String ): AxisSpecs = dataManager.getAxisSpecs( uid )
 }
 
+object Kernel {
+  def getResultFile( serverConfiguration: Map[String,String], resultId: String, deleteExisting: Boolean = false ): File = {
+    val resultsDirPath = serverConfiguration.getOrElse("wps.results.dir", System.getProperty("user.home") + "/.wps/results")
+    val resultsDir = new File(resultsDirPath); resultsDir.mkdirs()
+    val resultFile = new File( resultsDirPath + s"/$resultId.nc" )
+    if( deleteExisting && resultFile.exists ) resultFile.delete
+    resultFile
+  }
+}
+
 abstract class Kernel {
   val logger = LoggerFactory.getLogger(this.getClass)
   val identifiers = this.getClass.getName.split('$').flatMap( _.split('.') )
@@ -148,11 +158,8 @@ abstract class Kernel {
           case None => logger.warn("Missing resultId: can't save result")
           case Some(resultId) =>
             val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
-            val resultsDirPath = context.serverConfiguration.getOrElse("wps.results.dir", System.getProperty("user.home") + "/.wps/results")
-            val resultsDir = new File(resultsDirPath)
-            resultsDir.mkdirs()
-            val filePath = resultsDirPath + s"/$resultId.nc"
-            val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, filePath)
+            val resultFile = Kernel.getResultFile( context.serverConfiguration, resultId, true )
+            val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, resultFile.getAbsolutePath )
             assert(axes.length == maskedTensor.shape.length, "Axes not the same length as data shape in saveResult")
             val dims: IndexedSeq[nc2.Dimension] = for (idim <- (0 until axes.length); axis = axes(idim); size = maskedTensor.shape(idim)) yield writer.addDimension(null, axis, size)
             val variable: nc2.Variable = writer.addVariable(null, varname, ma2.DataType.FLOAT, dims.toList)
@@ -163,10 +170,10 @@ abstract class Kernel {
               writer.create()
               writer.write( variable, maskedTensor.ma2Data )
               writer.close()
-              println( "Writing result %s to file '%s'".format(resultId,filePath) )
+              println( "Writing result %s to file '%s'".format(resultId,resultFile.getAbsolutePath) )
               Some(resultId)
             } catch {
-              case e: IOException => logger.error("ERROR creating file %s%n%s".format(filePath, e.getMessage()))
+              case e: IOException => logger.error("ERROR creating file %s%n%s".format(resultFile.getAbsolutePath, e.getMessage()))
             }
         }
     }
