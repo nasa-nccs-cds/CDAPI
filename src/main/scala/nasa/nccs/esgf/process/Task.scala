@@ -328,9 +328,12 @@ object DomainAxis extends ContainerBase {
         val system = getStringValue( axis_map.get("system") )
         val bounds = getStringValue( axis_map.get("bounds") )
         Some( new DomainAxis( axistype, start, end, normalize(system), normalize(bounds) ) )
+      case sval: String =>
+        val gval = getGenericNumber( Some(sval) )
+        Some( new DomainAxis( axistype, gval, gval, "values" ) )
       case None => None
       case _ =>
-        val msg = "Unrecognized DomainAxis spec: " + axis_spec.getClass.toString
+        val msg = "Unrecognized DomainAxis spec: " + axis_spec.toString
         logger.error( msg )
         throw new Exception(msg)
     }

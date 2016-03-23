@@ -1,5 +1,7 @@
 package nasa.nccs.cdapi.cdm
 
+import java.util.Formatter
+
 import nasa.nccs.cdapi.kernels.{AxisSpecs, DataFragment}
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import nasa.nccs.esgf.utilities.numbers.GenericNumber
@@ -10,7 +12,7 @@ import org.nd4j.linalg.indexing.{INDArrayIndex, NDArrayIndex}
 import ucar.nc2.time.{CalendarDate, CalendarDateRange}
 import nasa.nccs.esgf.process._
 import ucar.{ma2, nc2}
-import ucar.nc2.dataset.{CoordinateAxis, CoordinateAxis1D, CoordinateAxis1DTime, CoordinateSystem}
+import ucar.nc2.dataset.{CoordinateAxis1D, _}
 import java.util.concurrent.atomic.AtomicReference
 
 import ucar.nc2.Attribute
@@ -61,27 +63,37 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     } else caldate
   }
 
-  def getTimeCoordIndex(coordAxis: CoordinateAxis, tval: String, role: BoundsRole.Value, strict: Boolean = true): Int = {
-    val indexVal: Int = coordAxis match {
-      case coordAxis1DTime: CoordinateAxis1DTime =>
-        val caldate: CalendarDate = cdsutils.dateTimeParser.parse(tval)
-        val caldate_bounded: CalendarDate = getBoundedCalDate(coordAxis1DTime, caldate, role, strict)
-        coordAxis1DTime.findTimeIndexFromCalendarDate(caldate_bounded)
-      case _ => throw new IllegalStateException("CDS2-CDSVariable: Can't process time axis type: " + coordAxis.getClass.getName)
-    }
-    indexVal
+  def getTimeAxis( coordAxis: CoordinateAxis): CoordinateAxis1DTime = coordAxis match {
+    case coordAxis1DTime: CoordinateAxis1DTime => coordAxis1DTime
+    case variableDS: VariableDS => CoordinateAxis1DTime.factory( dataset.ncDataset, variableDS, new Formatter() )
+    case x => throw new IllegalStateException("CDS2-CDSVariable: Can't create time axis from type type: %s ".format(coordAxis.getClass.getName))
   }
 
-  def getTimeIndexBounds(coordAxis: CoordinateAxis, startval: String, endval: String, strict: Boolean = true): ma2.Range = {
-    val startIndex = getTimeCoordIndex(coordAxis, startval, BoundsRole.Start, strict)
-    val endIndex = getTimeCoordIndex(coordAxis, endval, BoundsRole.End, strict)
+  def getTimeCoordIndex(coordAxis: CoordinateAxis, tval: String, role: BoundsRole.Value, strict: Boolean = true): Int = {
+    val coordAxis1DTime: CoordinateAxis1DTime = getTimeAxis( coordAxis )
+    val caldate: CalendarDate = cdsutils.dateTimeParser.parse(tval)
+    val caldate_bounded: CalendarDate = getBoundedCalDate(coordAxis1DTime, caldate, role, strict)
+    coordAxis1DTime.findTimeIndexFromCalendarDate(caldate_bounded)
+  }
+
+  def getTimeIndexBounds( coordAxis: CoordinateAxis, startval: String, endval: String, strict: Boolean = true): ma2.Range = {
+    val startIndex = getTimeCoordIndex( coordAxis, startval, BoundsRole.Start, strict)
+    val endIndex = getTimeCoordIndex( coordAxis, endval, BoundsRole.End, strict)
     new ma2.Range(startIndex, endIndex)
+  }
+
+  def getNormalizedCoordinate(coordAxis: CoordinateAxis, cval: Double ): Double = coordAxis.getAxisType match {
+    case nc2.constants.AxisType.Lon =>
+      if( (cval<0.0) && ( coordAxis.getMinValue >= 0.0 ) ) cval + 360.0
+      else if( (cval>180.0) && ( coordAxis.getMaxValue <= 180.0 ) ) cval - 360.0
+      else cval
+    case x => cval
   }
 
   def getGridCoordIndex(coordAxis: CoordinateAxis, cval: Double, role: BoundsRole.Value, strict: Boolean = true): Int = {
     coordAxis match {
       case coordAxis1D: CoordinateAxis1D =>
-        coordAxis1D.findCoordElement(cval) match {
+        coordAxis1D.findCoordElement( getNormalizedCoordinate( coordAxis, cval ) ) match {
           case -1 =>
             if (role == BoundsRole.Start) {
               val grid_start = coordAxis1D.getCoordValue(0)
@@ -90,7 +102,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
             } else {
               val end_index = coordAxis1D.getSize.toInt - 1
               val grid_end = coordAxis1D.getCoordValue(end_index)
-              logger.warn("Axis %s: ROI Start value %s outside of grid area, resetting to grid start: %f".format(coordAxis.getShortName, cval, grid_end))
+              logger.warn("Axis %s: ROI Start value %s outside of grid area, resetting to grid end: %f".format(coordAxis.getShortName, cval, grid_end))
               end_index
             }
           case ival => ival
@@ -105,8 +117,8 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     new ma2.Range(startIndex, endIndex)
   }
 
-  def getIndexBounds(coordAxis: CoordinateAxis, startval: GenericNumber, endval: GenericNumber, strict: Boolean = true): ma2.Range = {
-    val indexRange = if (coordAxis.getAxisType == nc2.constants.AxisType.Time) getTimeIndexBounds(coordAxis, startval.toString, endval.toString ) else getGridIndexBounds(coordAxis, startval, endval)
+  def getIndexBounds( coordAxis: CoordinateAxis, startval: GenericNumber, endval: GenericNumber, strict: Boolean = true): ma2.Range = {
+    val indexRange = if (coordAxis.getAxisType == nc2.constants.AxisType.Time) getTimeIndexBounds( coordAxis, startval.toString, endval.toString ) else getGridIndexBounds(coordAxis, startval, endval)
     assert(indexRange.last >= indexRange.first, "CDS2-CDSVariable: Coordinate bounds appear to be inverted: start = %s, end = %s".format(startval.toString, endval.toString))
     indexRange
   }
@@ -125,7 +137,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
                 case "values" =>
                   val boundedRange = getIndexBounds(coordAxis, axis.start, axis.end)
                   shape.update(dimension_index, boundedRange)
-                case _ => throw new IllegalStateException("CDS2-CDSVariable: Illegal system value in axis bounds: " + axis.system)
+                case _ => throw new IllegalStateException("CDSVariable: Illegal system value in axis bounds: " + axis.system)
               }
           }
         case None => logger.warn("Ignoring bounds on %s axis in variable %s".format(axis.name, ncVariable.getNameAndDimensions))

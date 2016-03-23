@@ -15,6 +15,7 @@ object GenericNumber {
   implicit def gen2float( gennum: GenericNumber ): Float = { gennum.toFloat }
   implicit def gen2double( gennum: GenericNumber ): Double = { gennum.toDouble }
   implicit def gen2string( gennum: GenericNumber ): String = { gennum.toString }
+  def normalize(sval: String): String = sval.stripPrefix("\"").stripSuffix("\"")
 
   def parse(sx: String): GenericNumber = {
     try {
@@ -52,7 +53,7 @@ abstract class GenericNumber {
 
 class StringNumber( val numvalue: String ) extends GenericNumber {
   type NumericType = String
-  override def value: NumericType = numvalue
+  override def value: NumericType = GenericNumber.normalize(numvalue)
   override def toInt: Int = value.toInt
   override def toFloat: Float = { value.toFloat }
   override def toDouble: Double = { value.toDouble }

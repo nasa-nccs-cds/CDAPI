@@ -31,8 +31,8 @@ object testOperationParser extends App {
 }
 
 object wpsNameMatchers {
-  val lonAxis = """^lat\w*""".r
-  val latAxis = """^lon\w*""".r
+  val lonAxis = """^lon\w*""".r
+  val latAxis = """^lat\w*""".r
   val levAxis = """^lev\w*|^plev\w*""".r
   val yAxis = """^y\w*""".r
   val xAxis = """^x\w*""".r

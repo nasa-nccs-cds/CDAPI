@@ -48,7 +48,6 @@ class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String,
     case caxis: CoordinateAxis1D => caxis;
     case x => throw new Exception("Coordinate Axis type %s can't currently be binned".format(x.getClass.getName))
   }
-  lazy val timeAxis: CoordinateAxis1DTime = CoordinateAxis1DTime.factory(variable.dataset.ncDataset, coordinateAxis, new Formatter())
 
   private def createArrayInstance( sliceArraySpec: SliceArraySpec ): IBinnedSliceArray = {
     reducer match {
@@ -64,6 +63,7 @@ class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String,
     val units = coordinateAxis.getUnitsString
     val sliceArraySpec = coordinateAxis.getAxisType match {
       case AxisType.Time =>
+        lazy val timeAxis: CoordinateAxis1DTime = CoordinateAxis1DTime.factory(variable.dataset.ncDataset, coordinateAxis, new Formatter())
         step match {
           case "month" =>
             if (cycle == "year") {
