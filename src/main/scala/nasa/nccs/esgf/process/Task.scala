@@ -2,7 +2,8 @@ package nasa.nccs.esgf.process
 
 import nasa.nccs.cdapi.cdm.{CDSDataset, CDSVariable, PartitionedFragment}
 import ucar.{ma2, nc2}
-
+import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 import scala.collection.{immutable, mutable}
 import scala.collection.mutable.HashSet
@@ -195,9 +196,23 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
   override def toString =  "DataFragmentSpec { varname = %s, collection = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, roi.toString, partitions.map(_.toString).mkString(", "))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
 
+  private def collapse( range: ma2.Range, newsize: Int = 1 ): ma2.Range = newsize match {
+    case 1 => val mid_val = (range.first+range.last)/2; new ma2.Range(range.getName,mid_val,mid_val)
+    case ns => val incr = math.round((range.last-range.first)/ns.toFloat); new ma2.Range(range.getName,range.first(),range.last,incr)
+  }
+
   def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec = {
     val newSection = roi.intersect(cutSection).shiftOrigin(roi)
     new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
+  }
+
+  def getReducedSection( axisIndices: Set[Int], newsize: Int = 1 ): ma2.Section = {
+    new ma2.Section( roi.getRanges.zipWithIndex.map( rngIndx => if( axisIndices(rngIndx._2) ) collapse( rngIndx._1, newsize ) else rngIndx._1 ):_* )
+  }
+
+  def getSubSection( subsection: ma2.Section  ): ma2.Section = {
+    new ma2.Section( roi.getRanges.zipWithIndex.map( rngIndx => { rngIndx._1.compose( subsection.getRange(rngIndx._2) ) } ) )
+
   }
 
   def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] = {

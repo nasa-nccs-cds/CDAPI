@@ -33,7 +33,7 @@ trait ExecutionResult {
   def toXml: xml.Elem
 }
 
-class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val result_data: Array[Float] ) extends ExecutionResult {
+class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val gridSpec: GridSpec, val result_data: Array[Float] ) extends ExecutionResult {
   def toXml = <result> { result_data.mkString( " ", ",", " " ) } </result>  // cdsutils.cdata(
 }
 
@@ -74,7 +74,7 @@ abstract class DataFragment( private val array: Nd4jMaskedTensor )  extends Seri
 }
 
 
-class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
+class AxisIndices( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
 
@@ -99,7 +99,7 @@ class ExecutionContext( val id: String, val fragments: List[KernelDataInput], va
     case Some( inputSpec ) => inputSpec.data
   }
 
-  def getAxisSpecs( uid: String ): AxisSpecs = dataManager.getAxisSpecs( uid )
+  def getAxisIndices( uid: String ): AxisIndices = dataManager.getAxisIndices( uid )
 }
 
 object Kernel {

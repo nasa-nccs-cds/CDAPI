@@ -87,7 +87,7 @@ trait IBinnedSliceArray {
   def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor]
 }
 
-class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
+class BinnedArrayBase[T: TypeTag]( val nbins: Int ) {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   protected val _accumulatorArray: IndexedSeq[T] = getAccumArray
     private def getAccumArray: IndexedSeq[T] = cdsutils.time(logger, "BinnedArray:getAccumArray") {
@@ -102,7 +102,7 @@ class BinnedArrayBase[T: TypeTag]( private val nbins: Int ) {
 //  def result: Array[Float] = _accumulatorArray.map( _.result ).toArray
 //}
 
-class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], private val nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray  {
+class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray  {
   private var refSliceOpt: Option[Nd4jMaskedTensor]  = None
   def nresults = _accumulatorArray(0).nresults
   def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor] = {
@@ -147,7 +147,7 @@ class aveSliceAccumulator extends BinSliceAccumulator {
   }
 }
 
-class BinnedAveSliceArray( private val binIndices: Array[Int], private val nbins: Int, val dimension: Int )  extends IBinnedSliceArray  {
+class BinnedAveSliceArray( private val binIndices: Array[Int], val nbins: Int, val dimension: Int )  extends IBinnedSliceArray  {
   var _values:  Option[Nd4jMaskedTensor] = None
   var _counts: Option[Nd4jMaskedTensor] = None
   def nresults = 1

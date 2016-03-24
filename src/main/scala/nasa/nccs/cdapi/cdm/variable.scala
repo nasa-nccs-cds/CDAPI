@@ -2,7 +2,7 @@ package nasa.nccs.cdapi.cdm
 
 import java.util.Formatter
 
-import nasa.nccs.cdapi.kernels.{AxisSpecs, DataFragment}
+import nasa.nccs.cdapi.kernels.{AxisIndices, DataFragment}
 import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
 import nasa.nccs.esgf.utilities.numbers.GenericNumber
 import nasa.nccs.utilities.cdsutils
@@ -13,21 +13,40 @@ import ucar.nc2.time.{CalendarDate, CalendarDateRange}
 import nasa.nccs.esgf.process._
 import ucar.{ma2, nc2}
 import ucar.nc2.dataset.{CoordinateAxis1D, _}
-import java.util.concurrent.atomic.AtomicReference
-
 import ucar.nc2.Attribute
+import ucar.nc2.constants.AxisType
 
 import scala.collection.JavaConversions._
-// import scala.collection.JavaConverters._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.concurrent
+
 
 object BoundsRole extends Enumeration { val Start, End = Value }
 
-class KernelDataInput( val dataFragment: PartitionedFragment, val axisSpecs: AxisSpecs ) {
+class KernelDataInput( val dataFragment: PartitionedFragment, val axisIndices: AxisIndices ) {
   def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] =  dataFragment.getVariableMetadata(dataManager)
   def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] =  dataFragment.getDatasetMetadata(dataManager)
   def getSpec: DataFragmentSpec = dataFragment.fragmentSpec
+}
+
+class AxisSpec( val name: String, val axisType: AxisType, val units: String ) {
+  def toXml: xml.Elem = <axis id={name} units={units} type={axisType.toString}> { getValues } </axis>
+  def getValues: String = ""
+}
+class RegularAxisSpec( name: String, axisType: AxisType, units: String, val start:Double, val interval:Double, val length: Int ) extends AxisSpec( name,  axisType, units) {
+  override def toXml: xml.Elem = <axis id={name} units={units} type={axisType.toString} start={start.toString} interval={interval.toString} length={length.toString}> </axis>
+}
+
+class IregularAxisSpec( name: String, axisType: AxisType, units: String, val values: Array[Double] ) extends AxisSpec( name,  axisType, units) {
+  override def getValues: String = values.mkString(", ")
+}
+
+class NominalAxisSpec( name: String, axisType: AxisType, units: String, val values: Array[String] ) extends AxisSpec( name,  axisType, units)  {
+  override def getValues: String = values.mkString(", ")
+}
+
+class GridSpec( axes: List[AxisSpec] ) {
+  def toXml: xml.Elem = <grid> { axes.map(_.toXml) } </grid>
 }
 
 object CDSVariable { }
@@ -45,6 +64,12 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   def getAttributeValue( key: String, default_value: String  ) =  attributes.get( key ) match { case Some( attr_val ) => attr_val.toString.split('=').last; case None => default_value }
   override def toString = "\nCDSVariable(%s) { description: '%s', shape: %s, dims: %s, }\n  --> Variable Attributes: %s".format(name, description, shape.mkString("[", " ", "]"), dims.mkString("[", ",", "]"), attributes.mkString("\n\t\t", "\n\t\t", "\n"))
   def normalize(sval: String): String = sval.stripPrefix("\"").stripSuffix("\"").toLowerCase
+
+  def getCoordinateAxes: List[ CoordinateAxis1D ] = {
+    ncVariable.getDimensions.map( dim => toCoordAxis1D( dataset.ncDataset.findCoordinateAxis( dim.getFullName ) ) ).toList
+  }
+  def getCoordinateAxis( axisType: nc2.constants.AxisType ): CoordinateAxis1D = toCoordAxis1D( dataset.ncDataset.findCoordinateAxis(axisType) )
+  def getCoordinateAxis( fullName: String ): CoordinateAxis1D = toCoordAxis1D( dataset.ncDataset.findCoordinateAxis(fullName) )
 
   def getBoundedCalDate(coordAxis1DTime: CoordinateAxis1DTime, caldate: CalendarDate, role: BoundsRole.Value, strict: Boolean = true): CalendarDate = {
     val date_range: CalendarDateRange = coordAxis1DTime.getCalendarDateRange
@@ -91,24 +116,42 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     case x => cval
   }
 
+  def getNumericCoordValues( axis: CoordinateAxis1D, range: ma2.Range ): Array[Double] = {
+    val coord_values = axis.getCoordValues;
+    if (coord_values.length == range.length) coord_values else (0 until range.length).map(iE => coord_values(range.element(iE))).toArray
+  }
+
+  def getAxisSpec( coordAxis: CoordinateAxis1D, range: ma2.Range ): AxisSpec = {
+    if (coordAxis.isRegular) new RegularAxisSpec(coordAxis.getFullName, coordAxis.getAxisType, coordAxis.getUnitsString, coordAxis.getCoordValue(range.first), coordAxis.getIncrement, range.length)
+    else {
+      if (coordAxis.isNumeric) new IregularAxisSpec(coordAxis.getFullName, coordAxis.getAxisType, coordAxis.getUnitsString, getNumericCoordValues(coordAxis, range))
+      else throw new Exception("Nominal Coordinate types not yet supported: %s ".format(coordAxis.getFullName))
+    }
+  }
+
+  def getAxisSpecs( section: ma2.Section ): List[AxisSpec] =  for( axisRangeTup <- getCoordinateAxes zip section.getRanges) yield getAxisSpec( axisRangeTup._1, axisRangeTup._2 )
+  def getGridSpec( section: ma2.Section ): GridSpec = new GridSpec( getAxisSpecs(section) )
+
+  def toCoordAxis1D(coordAxis: CoordinateAxis): CoordinateAxis1D = coordAxis match {
+    case coordAxis1D: CoordinateAxis1D => coordAxis1D
+    case _ => throw new IllegalStateException("CDSVariable: 2D Coord axes not yet supported: " + coordAxis.getClass.getName)
+  }
+
   def getGridCoordIndex(coordAxis: CoordinateAxis, cval: Double, role: BoundsRole.Value, strict: Boolean = true): Int = {
-    coordAxis match {
-      case coordAxis1D: CoordinateAxis1D =>
-        coordAxis1D.findCoordElement( getNormalizedCoordinate( coordAxis, cval ) ) match {
-          case -1 =>
-            if (role == BoundsRole.Start) {
-              val grid_start = coordAxis1D.getCoordValue(0)
-              logger.warn("Axis %s: ROI Start value %f outside of grid area, resetting to grid start: %f".format(coordAxis.getShortName, cval, grid_start))
-              0
-            } else {
-              val end_index = coordAxis1D.getSize.toInt - 1
-              val grid_end = coordAxis1D.getCoordValue(end_index)
-              logger.warn("Axis %s: ROI Start value %s outside of grid area, resetting to grid end: %f".format(coordAxis.getShortName, cval, grid_end))
-              end_index
-            }
-          case ival => ival
+    val coordAxis1D = toCoordAxis1D( coordAxis )
+    coordAxis1D.findCoordElement( getNormalizedCoordinate( coordAxis, cval ) ) match {
+      case -1 =>
+        if (role == BoundsRole.Start) {
+          val grid_start = coordAxis1D.getCoordValue(0)
+          logger.warn("Axis %s: ROI Start value %f outside of grid area, resetting to grid start: %f".format(coordAxis.getShortName, cval, grid_start))
+          0
+        } else {
+          val end_index = coordAxis1D.getSize.toInt - 1
+          val grid_end = coordAxis1D.getCoordValue(end_index)
+          logger.warn("Axis %s: ROI Start value %s outside of grid area, resetting to grid end: %f".format(coordAxis.getShortName, cval, grid_end))
+          end_index
         }
-      case _ => throw new IllegalStateException("CDS2-CDSVariable: Can't process xyz coord axis type: " + coordAxis.getClass.getName)
+      case ival => ival
     }
   }
 
@@ -193,14 +236,14 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     createPartitionedFragment( fragmentSpec, ndArray )
   }
 
-  def getAxisSpecs( axisConf: List[OperationSpecs] ): AxisSpecs = {
+  def getAxisIndices( axisConf: List[OperationSpecs] ): AxisIndices = {
     val axis_ids = mutable.HashSet[Int]()
     for( opSpec <- axisConf ) {
       val axes = opSpec.getSpec("axes")
       val axis_chars: List[Char] = if( axes.contains(',') ) axes.split(",").map(_.head).toList else axes.toList
       axis_ids ++= axis_chars.map( cval => getAxisIndex( cval ) )
     }
-    new AxisSpecs( axisIds=axis_ids.toSet )
+    new AxisIndices( axisIds=axis_ids.toSet )
   }
 
   def getAxisIndex( axisClass: Char ): Int = {
