@@ -27,6 +27,7 @@ object BoundsRole extends Enumeration { val Start, End = Value }
 class KernelDataInput( val dataFragment: PartitionedFragment, val axisSpecs: AxisSpecs ) {
   def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] =  dataFragment.getVariableMetadata(dataManager)
   def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] =  dataFragment.getDatasetMetadata(dataManager)
+  def getSpec: DataFragmentSpec = dataFragment.fragmentSpec
 }
 
 object CDSVariable { }

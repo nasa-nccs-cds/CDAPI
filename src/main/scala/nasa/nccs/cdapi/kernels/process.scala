@@ -33,7 +33,7 @@ trait ExecutionResult {
   def toXml: xml.Elem
 }
 
-class BlockingExecutionResult( val result_data: Array[Float] ) extends ExecutionResult {
+class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val result_data: Array[Float] ) extends ExecutionResult {
   def toXml = <result> { result_data.mkString( " ", ",", " " ) } </result>  // cdsutils.cdata(
 }
 
@@ -78,7 +78,7 @@ class AxisSpecs( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
 
-class ExecutionContext( val fragments: List[KernelDataInput], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val serverConfiguration: Map[String, String], val args: Map[String, String] ) {
+class ExecutionContext( val id: String, val fragments: List[KernelDataInput], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val serverConfiguration: Map[String, String], val args: Map[String, String] ) {
 
   def getDomain( domain_id: String ): DomainContainer= {
     domainMap.get(domain_id) match {
