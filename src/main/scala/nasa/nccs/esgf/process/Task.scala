@@ -195,6 +195,7 @@ class DataSource( val name: String, val collection: String, val domain: String )
 class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val roi: ma2.Section = new ma2.Section(), val partitions: Array[PartitionSpec]= Array() )  {
   override def toString =  "DataFragmentSpec { varname = %s, collection = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, roi.toString, partitions.map(_.toString).mkString(", "))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
+  def toXml = { <input collection={collection} varname={varname} roi={roi.toString}/> }
 
   private def collapse( range: ma2.Range, newsize: Int = 1 ): ma2.Range = newsize match {
     case 1 => val mid_val = (range.first+range.last)/2; new ma2.Range(range.getName,mid_val,mid_val)

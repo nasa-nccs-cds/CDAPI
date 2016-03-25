@@ -34,8 +34,12 @@ trait ExecutionResult {
 }
 
 class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val gridSpec: GridSpec, val result_data: Array[Float] ) extends ExecutionResult {
-  def toXml = <result> { result_data.mkString( " ", ",", " " ) } </result>  // cdsutils.cdata(
+  def toXml = {
+    val idToks = id.split('~')
+    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data> { result_data.mkString( " ", ",", " " ) }  </data>  </result>
+  }
 }
+// cdsutils.cdata(
 
 class AsyncExecutionResult( val results: List[String] )  extends ExecutionResult  {
   def this( resultOpt: Option[String]  ) { this( resultOpt.toList ) }
@@ -149,32 +153,27 @@ abstract class Kernel {
     }
   }
 
-  def saveResult( maskedTensor: Nd4jMaskedTensor, context: ExecutionContext, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
-    varMetadata.get("axes") match {
-      case None => logger.error("Can't write NetCDF data without axis information")
-      case Some(axisAttr) =>
-        val axes = axisAttr.getStringValue(0).split(' ')
-        context.args.get("resultId") match {
-          case None => logger.warn("Missing resultId: can't save result")
-          case Some(resultId) =>
-            val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
-            val resultFile = Kernel.getResultFile( context.serverConfiguration, resultId, true )
-            val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, resultFile.getAbsolutePath )
-            assert(axes.length == maskedTensor.shape.length, "Axes not the same length as data shape in saveResult")
-            val dims: IndexedSeq[nc2.Dimension] = for (idim <- (0 until axes.length); axis = axes(idim); size = maskedTensor.shape(idim)) yield writer.addDimension(null, axis, size)
-            val variable: nc2.Variable = writer.addVariable(null, varname, ma2.DataType.FLOAT, dims.toList)
-            varMetadata.values.foreach( attr => variable.addAttribute(attr) )
-            variable.addAttribute( new nc2.Attribute( "missing_value", maskedTensor.invalid ) )
-            dsetMetadata.foreach( attr => writer.addGroupAttribute(null, attr ) )
-            try {
-              writer.create()
-              writer.write( variable, maskedTensor.ma2Data )
-              writer.close()
-              println( "Writing result %s to file '%s'".format(resultId,resultFile.getAbsolutePath) )
-              Some(resultId)
-            } catch {
-              case e: IOException => logger.error("ERROR creating file %s%n%s".format(resultFile.getAbsolutePath, e.getMessage()))
-            }
+  def saveResult( maskedTensor: Nd4jMaskedTensor, context: ExecutionContext, gridSpec: GridSpec, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
+    context.args.get("resultId") match {
+      case None => logger.warn("Missing resultId: can't save result")
+      case Some(resultId) =>
+        val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
+        val resultFile = Kernel.getResultFile( context.serverConfiguration, resultId, true )
+        val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, resultFile.getAbsolutePath )
+        assert(gridSpec.axes.length == maskedTensor.shape.length, "Axes not the same length as data shape in saveResult")
+        val dims: IndexedSeq[nc2.Dimension] = (0 until gridSpec.axes.length).map( idim => writer.addDimension(null, gridSpec.axes(idim).name, maskedTensor.shape(idim)))
+        val variable: nc2.Variable = writer.addVariable(null, varname, ma2.DataType.FLOAT, dims.toList)
+        varMetadata.values.foreach( attr => variable.addAttribute(attr) )
+        variable.addAttribute( new nc2.Attribute( "missing_value", maskedTensor.invalid ) )
+        dsetMetadata.foreach( attr => writer.addGroupAttribute(null, attr ) )
+        try {
+          writer.create()
+          writer.write( variable, maskedTensor.ma2Data )
+          writer.close()
+          println( "Writing result %s to file '%s'".format(resultId,resultFile.getAbsolutePath) )
+          Some(resultId)
+        } catch {
+          case e: IOException => logger.error("ERROR creating file %s%n%s".format(resultFile.getAbsolutePath, e.getMessage()))
         }
     }
     None

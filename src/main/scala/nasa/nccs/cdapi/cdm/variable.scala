@@ -30,22 +30,26 @@ class KernelDataInput( val dataFragment: PartitionedFragment, val axisIndices: A
 }
 
 class AxisSpec( val name: String, val axisType: AxisType, val units: String ) {
-  def toXml: xml.Elem = <axis id={name} units={units} type={axisType.toString}> { getValues } </axis>
+  def toXml: xml.Elem = <axis id={name} units={units} class={axisClass} type={axisType.toString}> { getValues } </axis>
+  val axisClass = "base"
   def getValues: String = ""
 }
 class RegularAxisSpec( name: String, axisType: AxisType, units: String, val start:Double, val interval:Double, val length: Int ) extends AxisSpec( name,  axisType, units) {
-  override def toXml: xml.Elem = <axis id={name} units={units} type={axisType.toString} start={start.toString} interval={interval.toString} length={length.toString}> </axis>
+  override val axisClass = "regular"
+  override def toXml: xml.Elem = <axis id={name} units={units} class={axisClass} type={axisType.toString} start={start.toString} interval={interval.toString} length={length.toString}> </axis>
 }
 
 class IregularAxisSpec( name: String, axisType: AxisType, units: String, val values: Array[Double] ) extends AxisSpec( name,  axisType, units) {
+  override val axisClass = "iregular"
   override def getValues: String = values.mkString(", ")
 }
 
 class NominalAxisSpec( name: String, axisType: AxisType, units: String, val values: Array[String] ) extends AxisSpec( name,  axisType, units)  {
+  override val axisClass = "nominal"
   override def getValues: String = values.mkString(", ")
 }
 
-class GridSpec( axes: List[AxisSpec] ) {
+class GridSpec( val axes: List[AxisSpec] ) {
   def toXml: xml.Elem = <grid> { axes.map(_.toXml) } </grid>
 }
 
