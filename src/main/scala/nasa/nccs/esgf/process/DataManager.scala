@@ -14,8 +14,8 @@ trait DataLoader {
   def getDataset( collection: String, varName: String ): CDSDataset
   def getVariable( collection: String, varName: String ): CDSVariable
   def getFragment( fragSpec: DataFragmentSpec ): PartitionedFragment
-  def findEnclosingFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
-  def findEnclosedFragSpecs(targetFragSpec: DataFragmentSpec): Set[DataFragmentSpec]
+  def findEnclosingFragSpecs( fKeyChild: DataFragmentKey): Set[DataFragmentKey]
+  def findEnclosedFragSpecs( fKeyParent: DataFragmentKey): Set[DataFragmentKey]
 }
 
 case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {}
@@ -62,10 +62,15 @@ class DataManager( val dataLoader: DataLoader ) {
   }
 
   def getSubset( var_uid: String, baseFragmentSpec: DataFragmentSpec, new_domain_container: DomainContainer ): PartitionedFragment = {
-    val baseFragment = dataLoader.getFragment(baseFragmentSpec)
+    val t0 = System.nanoTime
+    val baseFragment = dataLoader.getFragment( baseFragmentSpec )
+    val t1 = System.nanoTime
     val variable = getVariable( var_uid )
     val newFragmentSpec = variable.createFragmentSpec( new_domain_container.axes )
-    baseFragment.cutIntersection( newFragmentSpec.roi )
+    val rv = baseFragment.cutIntersection( newFragmentSpec.roi )
+    val t2 = System.nanoTime
+    logger.info( " GetSubsetT: %.4f %.4f".format( (t1-t0)/1.0E9, (t2-t1)/1.0E9 ) )
+    rv
   }
 
   def getVariableData( uid: String ): PartitionedFragment = {
@@ -90,11 +95,17 @@ class DataManager( val dataLoader: DataLoader ) {
 
   def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): PartitionedFragment = {
     val data_source: DataSource = dataContainer.getSource
+    val t0 = System.nanoTime
     val variable = dataLoader.getVariable(data_source.collection, data_source.name)
+    val t1 = System.nanoTime
     val axisSpecs: AxisIndices = variable.getAxisIndices( dataContainer.getOpSpecs )
     val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
     uidToSource += ( dataContainer.uid -> new OperationInputSpec( fragmentSpec, axisSpecs )  )
-    dataLoader.getFragment(fragmentSpec)
+    val t2 = System.nanoTime
+    val rv = dataLoader.getFragment(fragmentSpec)
+    val t3 = System.nanoTime
+    logger.info( " loadVariableDataT: %.4f %.4f ".format( (t1-t0)/1.0E9, (t3-t2)/1.0E9 ) )
+    rv
   }
 }
 

@@ -192,8 +192,26 @@ class DataSource( val name: String, val collection: String, val domain: String )
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
 }
 
+class DataFragmentKey( val varname: String, val collection: String, val origin: Array[Int], val shape: Array[Int] ) {
+  override def toString =  "%s:%s:%s:%s".format( varname, collection, origin.mkString(","), shape.mkString(","))
+  def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
+  def getRoi: ma2.Section = new ma2.Section(origin,shape)
+}
+
+object DataFragmentKey {
+  def parseArray( arrStr: String ): Array[Int] = { arrStr.split(',').map( _.toInt) }
+  def apply( fkeyStr: String ): DataFragmentKey = {
+    val toks = fkeyStr.split(':')
+    new DataFragmentKey( toks(0), toks(1), parseArray(toks(2)), parseArray(toks(3)) )
+  }
+  def sameVariable( fkeyStr: String, otherCollection: String, otherVarName: String ): Boolean = {
+    val toks = fkeyStr.split(':')
+    (toks(0) == otherVarName) && (toks(1) == otherCollection)
+  }
+}
+
 class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val units: String="", val longname: String="", val roi: ma2.Section = new ma2.Section(), val partitions: Array[PartitionSpec]= Array() )  {
-  override def toString =  "DataFragmentSpec { varname = %s, collection = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, roi.toString, partitions.map(_.toString).mkString(", "))
+  override def toString =  "DataFragmentSpec { varname = %s, collection = %s, dimensions = %s, units = %s, longname = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, dimensions, units, longname, roi.toString, partitions.map(_.toString).mkString(", "))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
   def toXml = { <input collection={collection} varname={varname} longname={longname} units={units} roi={roi.toString}/> }
 
@@ -201,6 +219,11 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
     case 1 => val mid_val = (range.first+range.last)/2; new ma2.Range(range.getName,mid_val,mid_val)
     case ns => val incr = math.round((range.last-range.first)/ns.toFloat); new ma2.Range(range.getName,range.first(),range.last,incr)
   }
+
+  def getKey: DataFragmentKey = {
+    new DataFragmentKey( varname, collection, roi.getOrigin, roi.getShape )
+  }
+  def getKeyString: String = getKey.toString
 
   def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec = {
     val newSection = roi.intersect(cutSection).shiftOrigin(roi)

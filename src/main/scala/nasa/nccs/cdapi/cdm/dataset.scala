@@ -29,12 +29,16 @@ object CDSDataset {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
   def load( dsetName: String, collection: Collection, varName: String = "" ) = {
+    val t0 = System.nanoTime
     val uri = collection.getUri( varName )
     val ncDataset: NetcdfDataset = loadNetCDFDataSet( uri )
     val coordSystems: List[CoordinateSystem] = ncDataset.getCoordinateSystems.toList
     assert( coordSystems.size <= 1, "Multiple coordinate systems for one dataset is not supported" )
     if(coordSystems.isEmpty) throw new IllegalStateException("Error creating coordinate system for variable " + varName )
-    new CDSDataset( dsetName, uri, ncDataset, coordSystems.head )
+    val rv = new CDSDataset( dsetName, uri, ncDataset, coordSystems.head )
+    val t1 = System.nanoTime
+    logger.info( "loadDataset(%s)T> %.4f,  ".format( uri, (t1-t0)/1.0E9 ) )
+    rv
   }
 
   private def loadNetCDFDataSet(url: String): NetcdfDataset = {
@@ -54,15 +58,20 @@ object CDSDataset {
 }
 
 class CDSDataset( val name: String, val uri: String, val ncDataset: NetcdfDataset, val coordSystem: CoordinateSystem ) {
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   val attributes: List[nc2.Attribute] = ncDataset.getGlobalAttributes.map( a => { new nc2.Attribute( name + "--" + a.getFullName, a ) } ).toList
   val coordAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
 
   def getCoordinateAxes: List[CoordinateAxis] = ncDataset.getCoordinateAxes.toList
 
   def loadVariable( varName: String ): cdm.CDSVariable = {
-      val ncVariable = ncDataset.findVariable(varName)
-      if (ncVariable == null) throw new IllegalStateException("Variable '%s' was not loaded".format(varName))
-      new cdm.CDSVariable( varName, this, ncVariable )
+    val t0 = System.nanoTime
+    val ncVariable = ncDataset.findVariable(varName)
+    if (ncVariable == null) throw new IllegalStateException("Variable '%s' was not loaded".format(varName))
+    val rv = new cdm.CDSVariable( varName, this, ncVariable )
+    val t1 = System.nanoTime
+    logger.info( "loadVariable(%s)T> %.4f,  ".format( varName, (t1-t0)/1.0E9 ) )
+    rv
   }
 
   def getCoordinateAxis( axisType: DomainAxis.Type.Value ): Option[CoordinateAxis] = {
