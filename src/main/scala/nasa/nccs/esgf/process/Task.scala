@@ -192,10 +192,10 @@ class DataSource( val name: String, val collection: String, val domain: String )
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
 }
 
-class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val roi: ma2.Section = new ma2.Section(), val partitions: Array[PartitionSpec]= Array() )  {
+class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val units: String="", val longname: String="", val roi: ma2.Section = new ma2.Section(), val partitions: Array[PartitionSpec]= Array() )  {
   override def toString =  "DataFragmentSpec { varname = %s, collection = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, roi.toString, partitions.map(_.toString).mkString(", "))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
-  def toXml = { <input collection={collection} varname={varname} roi={roi.toString}/> }
+  def toXml = { <input collection={collection} varname={varname} longname={longname} units={units} roi={roi.toString}/> }
 
   private def collapse( range: ma2.Range, newsize: Int = 1 ): ma2.Range = newsize match {
     case 1 => val mid_val = (range.first+range.last)/2; new ma2.Range(range.getName,mid_val,mid_val)
@@ -204,7 +204,7 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
 
   def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec = {
     val newSection = roi.intersect(cutSection).shiftOrigin(roi)
-    new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
+    new DataFragmentSpec( varname, collection, dimensions, units, longname, newSection, partitions )
   }
 
   def getReducedSection( axisIndices: Set[Int], newsize: Int = 1 ): ma2.Section = {
@@ -235,7 +235,7 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
   }
 
   def reSection( newSection: ma2.Section ): DataFragmentSpec = {
-    new DataFragmentSpec( varname, collection, dimensions, newSection, partitions )
+    new DataFragmentSpec( varname, collection, dimensions, units, longname, newSection, partitions )
   }
 
 //  private var dataFrag: Option[PartitionedFragment] = None

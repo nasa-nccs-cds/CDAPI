@@ -216,7 +216,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
       assert(partAxisIndex != -1, "CDS2-CDSVariable: Can't find axis %s in variable %s".format(partitionAxis.getShortName, ncVariable.getNameAndDimensions))
       List( new PartitionSpec(partAxisIndex, nPart, partIndex) )
     }
-    new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), getSubSection(roi), partitions.toArray )
+    new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), ncVariable.getUnitsString, ncVariable.getFullName, getSubSection(roi), partitions.toArray )
   }
 
   def loadPartition( fragmentSpec : DataFragmentSpec, axisConf: List[OperationSpecs] ): PartitionedFragment = {
