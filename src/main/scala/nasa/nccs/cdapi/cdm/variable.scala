@@ -216,7 +216,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
       assert(partAxisIndex != -1, "CDS2-CDSVariable: Can't find axis %s in variable %s".format(partitionAxis.getShortName, ncVariable.getNameAndDimensions))
       List( new PartitionSpec(partAxisIndex, nPart, partIndex) )
     }
-    new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), ncVariable.getUnitsString, ncVariable.getFullName, getSubSection(roi), partitions.toArray )
+    new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), ncVariable.getUnitsString, getAttributeValue( "long_name", ncVariable.getFullName ), getSubSection(roi), partitions.toArray )
   }
 
   def loadPartition( fragmentSpec : DataFragmentSpec, axisConf: List[OperationSpecs] ): PartitionedFragment = {
@@ -268,7 +268,7 @@ object PartitionedFragment {
 class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragmentSpec, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {
   val LOG = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def this() = this( new Nd4jMaskedTensor, new DataFragmentSpec )
+  def this() = this( new Nd4jMaskedTensor( Nd4j.zeros(0), Float.MaxValue ), new DataFragmentSpec )
 
   def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] = {
     fragmentSpec.getVariableMetadata(dataManager) ++ Map( metaDataVar.map( item => (item._1 -> new Attribute(item._1,item._2)) ) :_* )

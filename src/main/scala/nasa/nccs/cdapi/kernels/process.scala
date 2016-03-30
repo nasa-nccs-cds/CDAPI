@@ -30,13 +30,14 @@ class Port( val name: String, val cardinality: String, val description: String, 
 }
 
 trait ExecutionResult {
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   def toXml: xml.Elem
 }
 
-class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val gridSpec: GridSpec, val result_data: Array[Float] ) extends ExecutionResult {
+class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val gridSpec: GridSpec, val result_tensor: Nd4jMaskedTensor ) extends ExecutionResult {
   def toXml = {
     val idToks = id.split('~')
-    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data> { result_data.mkString( " ", ",", " " ) }  </data>  </result>
+    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.invalid.toString}> {result_tensor.data.mkString(",")}  </data>  </result>
   }
 }
 // cdsutils.cdata(
@@ -75,6 +76,11 @@ abstract class DataFragment( private val array: Nd4jMaskedTensor )  extends Seri
   def data: Nd4jMaskedTensor = array
   def name = array.name
   def shape: List[Int] = array.shape.toList
+
+  def sampleDataString( nsamples: Int = 20, step: Int = 20 ) = {
+    (0 to step*nsamples by step).map( array.sampleValue(_) ).mkString("[ ", ", ", " ]")
+  }
+  def getValue( indices: Array[Int] ): Float = array.getValue( indices )
 }
 
 

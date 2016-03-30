@@ -25,7 +25,7 @@ object Nd4jM {
   }
 }
 
-class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Float = Float.MaxValue ) extends Serializable {
+class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Serializable {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   val name: String = "Nd4jMaskedTensor"
   val shape = tensor.shape
@@ -43,6 +43,10 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
   def toRawDataString = data.mkString("[ ", ", ", " ]")
 
   def toDataString = tensor.toString
+
+  def sampleValue( index: Int = 0 ): Float = tensor.getFloat(index)
+
+  def getValue( indices: Array[Int] ): Float = tensor.getFloat( indices )
 
   // def apply( indices: Int*): Float = tensor.getFloat( indices )
 
@@ -241,7 +245,7 @@ class Nd4jMaskedTensor( val tensor: INDArray = Nd4j.create(0), val invalid: Floa
 
   def apply( ranges: List[INDArrayIndex] ) = {
     val IndArray = tensor.get(ranges: _*)
-    new Nd4jMaskedTensor(IndArray)
+    new Nd4jMaskedTensor(IndArray,invalid)
   }
 
   def zeros: Nd4jMaskedTensor = new Nd4jMaskedTensor( Nd4j.zerosLike(tensor), invalid )
