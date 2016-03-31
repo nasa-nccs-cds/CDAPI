@@ -126,11 +126,20 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   }
 
   def getAxisSpec( coordAxis: CoordinateAxis1D, range: ma2.Range ): AxisSpec = {
-    if (coordAxis.isRegular) new RegularAxisSpec(coordAxis.getFullName, coordAxis.getAxisType, coordAxis.getUnitsString, coordAxis.getCoordValue(range.first), coordAxis.getIncrement, range.length)
-    else {
-      if (coordAxis.isNumeric) new IregularAxisSpec(coordAxis.getFullName, coordAxis.getAxisType, coordAxis.getUnitsString, getNumericCoordValues(coordAxis, range))
-      else throw new Exception("Nominal Coordinate types not yet supported: %s ".format(coordAxis.getFullName))
-    }
+    coordAxis.getAxisType match {
+      case AxisType.Time =>
+        val timeAxis: CoordinateAxis1DTime = CoordinateAxis1DTime.factory(dataset.ncDataset, coordAxis, new Formatter())
+        val timeCalValues: List[CalendarDate] = timeAxis.getCalendarDates.toList
+        val timeZero = CalendarDate.of(timeCalValues.head.getCalendar,1970,1,1,1,1,1)
+        val timeRelValues = timeCalValues.map( calVal => calVal.getDifferenceInMsecs(timeZero)/1000.0 ).toArray
+        new IregularAxisSpec( "time", AxisType.Time, "seconds since 1970-1-1", timeRelValues )
+      case x =>
+        if (coordAxis.isRegular) new RegularAxisSpec(coordAxis.getFullName, coordAxis.getAxisType, coordAxis.getUnitsString, coordAxis.getCoordValue(range.first), coordAxis.getIncrement, range.length)
+        else {
+          if (coordAxis.isNumeric) new IregularAxisSpec(coordAxis.getFullName, coordAxis.getAxisType, coordAxis.getUnitsString, getNumericCoordValues(coordAxis, range))
+          else throw new Exception("Nominal Coordinate types not yet supported: %s ".format(coordAxis.getFullName))
+        }
+      }
   }
 
   def getAxisSpecs( section: ma2.Section ): List[AxisSpec] =  for( axisRangeTup <- getCoordinateAxes zip section.getRanges) yield getAxisSpec( axisRangeTup._1, axisRangeTup._2 )
@@ -277,7 +286,7 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragme
     fragmentSpec.getDatasetMetadata(dataManager)
   }
 
-  override def toString = { "PartitionedFragment: shape = %s, section = %s".format( array.shape.toString, fragmentSpec.roi.toString ) }
+  override def toString = { "{Fragment: shape = [%s], section = [%s]}".format( array.shape.mkString(","), fragmentSpec.roi.toString ) }
 
   def cutIntersection( cutSection: ma2.Section, copy: Boolean = true ): PartitionedFragment = {
     val newFragSpec = fragmentSpec.cutIntersection(cutSection)

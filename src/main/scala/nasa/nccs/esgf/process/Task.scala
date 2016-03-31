@@ -196,6 +196,10 @@ class DataFragmentKey( val varname: String, val collection: String, val origin: 
   override def toString =  "%s:%s:%s:%s".format( varname, collection, origin.mkString(","), shape.mkString(","))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
   def getRoi: ma2.Section = new ma2.Section(origin,shape)
+  def equalRoi( df: DataFragmentKey ): Boolean = ( shape.sameElements(df.shape) && origin.sameElements(df.origin ) )
+  def getSize: Int = shape.product
+  def contains( df: DataFragmentKey ): Boolean = getRoi.contains( df.getRoi )
+  def containsSmaller( df: DataFragmentKey ): Boolean = ( !equalRoi( df ) && contains( df ) )
 }
 
 object DataFragmentKey {
@@ -223,6 +227,8 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
   def getKey: DataFragmentKey = {
     new DataFragmentKey( varname, collection, roi.getOrigin, roi.getShape )
   }
+  def getSize: Int = roi.getShape.product
+
   def getKeyString: String = getKey.toString
 
   def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec = {

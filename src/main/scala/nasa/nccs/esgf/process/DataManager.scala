@@ -13,7 +13,7 @@ object FragmentSelectionCriteria extends Enumeration { val Largest, Smallest = V
 trait DataLoader {
   def getDataset( collection: String, varName: String ): CDSDataset
   def getVariable( collection: String, varName: String ): CDSVariable
-  def getFragment( fragSpec: DataFragmentSpec ): PartitionedFragment
+  def getFragment( fragSpec: DataFragmentSpec, abortSizeFraction: Float=0f ): PartitionedFragment
   def findEnclosingFragSpecs( fKeyChild: DataFragmentKey): Set[DataFragmentKey]
   def findEnclosedFragSpecs( fKeyParent: DataFragmentKey): Set[DataFragmentKey]
 }
@@ -102,7 +102,7 @@ class DataManager( val dataLoader: DataLoader ) {
     val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
     uidToSource += ( dataContainer.uid -> new OperationInputSpec( fragmentSpec, axisSpecs )  )
     val t2 = System.nanoTime
-    val rv = dataLoader.getFragment(fragmentSpec)
+    val rv = dataLoader.getFragment( fragmentSpec, 0.3f )
     val t3 = System.nanoTime
     logger.info( " loadVariableDataT: %.4f %.4f ".format( (t1-t0)/1.0E9, (t3-t2)/1.0E9 ) )
     rv
