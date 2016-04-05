@@ -14,8 +14,8 @@ trait DataLoader {
   def getDataset( collection: String, varName: String ): CDSDataset
   def getVariable( collection: String, varName: String ): CDSVariable
   def getFragment( fragSpec: DataFragmentSpec, abortSizeFraction: Float=0f ): PartitionedFragment
-  def findEnclosingFragSpecs( fKeyChild: DataFragmentKey): Set[DataFragmentKey]
-  def findEnclosedFragSpecs( fKeyParent: DataFragmentKey): Set[DataFragmentKey]
+  def findEnclosingFragSpecs( fKeyChild: DataFragmentKey, admitEquality: Boolean = true): Set[DataFragmentKey]
+  def findEnclosedFragSpecs( fKeyParent: DataFragmentKey, admitEquality: Boolean = true): Set[DataFragmentKey]
 }
 
 case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {}

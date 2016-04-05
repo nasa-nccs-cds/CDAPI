@@ -199,6 +199,7 @@ class DataFragmentKey( val varname: String, val collection: String, val origin: 
   def equalRoi( df: DataFragmentKey ): Boolean = ( shape.sameElements(df.shape) && origin.sameElements(df.origin ) )
   def getSize: Int = shape.product
   def contains( df: DataFragmentKey ): Boolean = getRoi.contains( df.getRoi )
+  def contains( df: DataFragmentKey, admitEquality: Boolean ): Boolean = if( admitEquality ) contains( df ) else containsSmaller( df )
   def containsSmaller( df: DataFragmentKey ): Boolean = ( !equalRoi( df ) && contains( df ) )
 }
 
