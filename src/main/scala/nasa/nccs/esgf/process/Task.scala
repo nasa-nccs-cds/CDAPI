@@ -275,7 +275,7 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
 
 
 object OperationSpecs {
-  def apply( op: OperationContainer ) = new OperationSpecs( op.name, op.optargs )
+  def apply( op: OperationContainer ) = new OperationSpecs( op.name, op.getConfiguration("operation") )
 }
 class OperationSpecs( id: String, val optargs: Map[String,String] ) {
   val ids = mutable.HashSet( id )
@@ -440,17 +440,21 @@ object WorkflowContainer extends ContainerBase {
       case e: Exception =>
         val msg = "Error creating WorkflowContainer: " + e.getMessage
         logger.error(msg)
-        throw new Exception(msg)
+        throw e
     }
   }
 }
 
-class OperationContainer(val identifier: String, val name: String, val result: String = "", val inputs: List[String], val optargs: Map[String,String])  extends ContainerBase {
+class OperationContainer( val identifier: String, val name: String, val result: String, val inputs: List[String], args: (String,String)* )  extends ContainerBase {
+  val configurations: mutable.Map[ String, Map[String,String] ] = mutable.Map( "operation" -> Map(args:_*) )
+  def addConfiguration( cfg_type: String, cfg_values: Map[String,String] ) =  configurations( cfg_type ) = cfg_values
+  def getConfiguration( cfg_type: String ): Map[String,String] =  configurations.getOrElse( cfg_type, Map.empty() )
+
   override def toString = {
-    s"OperationContainer { id = $identifier,  name = $name, result = $result, inputs = $inputs, optargs = $optargs }"
+    s"OperationContainer { id = $identifier,  name = $name, result = $result, inputs = $inputs, configurations = $configurations }"
   }
   override def toXml = {
-    <proc id={identifier} name={name} result={result} inputs={inputs.toString} optargs={optargs.toString}/>
+    <proc id={identifier} name={name} result={result} inputs={inputs.toString} configurations={configurations.toString}/>
   }
 }
 
@@ -469,11 +473,12 @@ object OperationContainer extends ContainerBase {
         }
         val ids = ident.split("~").map( _.trim.toLowerCase )
         ids.length match {
-          case 1 => new OperationContainer( identifier = ident, name=process_name, result = ids(0), inputs = varlist.toList, optargs=optargs.toMap[String,String] )
+          case 1 =>
+            new OperationContainer( identifier = ident, name=process_name, result = ids(0), inputs = varlist.toList, optargs:_* )
           case 2 =>
             val op_name = if( ids(0).nonEmpty ) ids(0) else process_name
             val identifier = if( ids(0).nonEmpty ) ident else process_name + ident
-            new OperationContainer( identifier = identifier, name = op_name, result = ids(1), inputs = varlist.toList, optargs=optargs.toMap[String,String] )
+            new OperationContainer( identifier = identifier, name = op_name, result = ids(1), inputs = varlist.toList, optargs:_* )
           case _ =>
             val msg = "Unrecognized format for Operation id: " + ident
             logger.error(msg)

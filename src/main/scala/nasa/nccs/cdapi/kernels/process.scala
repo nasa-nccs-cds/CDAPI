@@ -87,22 +87,29 @@ abstract class DataFragment( private val array: Nd4jMaskedTensor )  extends Seri
 class AxisIndices( private val axisIds: Set[Int] = Set.empty ) {
   def getAxes: Seq[Int] = axisIds.toSeq
 }
+// , val binArrayOpt: Option[BinnedArrayFactory], val dataManager: DataManager, val serverConfiguration: Map[String, String], val args: Map[String, String],
 
-class ExecutionContext( val id: String, val fragments: List[KernelDataInput], val binArrayOpt: Option[BinnedArrayFactory], val domainMap: Map[String,DomainContainer], val dataManager: DataManager, val serverConfiguration: Map[String, String], val args: Map[String, String] ) {
+class ExecutionContext( operation: OperationContainer, val domains: Map[String,DomainContainer], val dataManager: DataManager ) {
 
   def getDomain( domain_id: String ): DomainContainer= {
-    domainMap.get(domain_id) match {
+    domains.get(domain_id) match {
       case Some(domain_container) => domain_container
       case None =>
         throw new Exception("Undefined domain in ExecutionContext: " + domain_id)
     }
   }
-//  def getSubset( var_uid: String, domain_id: String ) = {
+  def id: String = operation.identifier
+  def getConfiguration( cfg_type: String ): Map[String,String] = operation.getConfiguration( cfg_type )
+  def binArrayOpt = dataManager.getBinnedArrayFactory( operation )
+  def inputs: List[KernelDataInput] = for( uid <- operation.inputs ) yield new KernelDataInput( dataManager.getVariableData(uid), dataManager.getAxisIndices(uid) )
+
+
+  //  def getSubset( var_uid: String, domain_id: String ) = {
 //    dataManager.getSubset( var_uid, getDomain(domain_id) )
 //  }
   def getDataSources: Map[String,OperationInputSpec] = dataManager.getDataSources
 
-  def async: Boolean = args.getOrElse("async", "false").toBoolean
+  def async: Boolean = getConfiguration("run").getOrElse("async", "false").toBoolean
 
   def getFragmentSpec( uid: String ): DataFragmentSpec = dataManager.getOperationInputSpec(uid) match {
     case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
@@ -160,11 +167,11 @@ abstract class Kernel {
   }
 
   def saveResult( maskedTensor: Nd4jMaskedTensor, context: ExecutionContext, gridSpec: GridSpec, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
-    context.args.get("resultId") match {
+    context.getConfiguration("run").get("resultId") match {
       case None => logger.warn("Missing resultId: can't save result")
       case Some(resultId) =>
         val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
-        val resultFile = Kernel.getResultFile( context.serverConfiguration, resultId, true )
+        val resultFile = Kernel.getResultFile( context.getConfiguration("server"), resultId, true )
         val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, resultFile.getAbsolutePath )
         assert(gridSpec.axes.length == maskedTensor.shape.length, "Axes not the same length as data shape in saveResult")
         val dims: IndexedSeq[nc2.Dimension] = (0 until gridSpec.axes.length).map( idim => writer.addDimension(null, gridSpec.axes(idim).name, maskedTensor.shape(idim)))
