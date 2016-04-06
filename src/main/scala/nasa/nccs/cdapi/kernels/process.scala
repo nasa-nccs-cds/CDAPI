@@ -89,35 +89,29 @@ class AxisIndices( private val axisIds: Set[Int] = Set.empty ) {
 }
 // , val binArrayOpt: Option[BinnedArrayFactory], val dataManager: DataManager, val serverConfiguration: Map[String, String], val args: Map[String, String],
 
-class ExecutionContext( operation: OperationContainer, val domains: Map[String,DomainContainer], val dataManager: DataManager ) {
-
-  def getDomain( domain_id: String ): DomainContainer= {
-    domains.get(domain_id) match {
-      case Some(domain_container) => domain_container
-      case None =>
-        throw new Exception("Undefined domain in ExecutionContext: " + domain_id)
-    }
-  }
-  def id: String = operation.identifier
-  def getConfiguration( cfg_type: String ): Map[String,String] = operation.getConfiguration( cfg_type )
-  def binArrayOpt = dataManager.getBinnedArrayFactory( operation )
-  def inputs: List[KernelDataInput] = for( uid <- operation.inputs ) yield new KernelDataInput( dataManager.getVariableData(uid), dataManager.getAxisIndices(uid) )
-
-
-  //  def getSubset( var_uid: String, domain_id: String ) = {
-//    dataManager.getSubset( var_uid, getDomain(domain_id) )
+//class ExecutionContext( operation: OperationContext, val domains: Map[String,DomainContainer], val dataManager: DataManager ) {
+//
+//
+//  def id: String = operation.identifier
+//  def getConfiguration( cfg_type: String ): Map[String,String] = operation.getConfiguration( cfg_type )
+//  def binArrayOpt = dataManager.getBinnedArrayFactory( operation )
+//  def inputs: List[KernelDataInput] = for( uid <- operation.inputs ) yield new KernelDataInput( dataManager.getVariableData(uid), dataManager.getAxisIndices(uid) )
+//
+//
+//  //  def getSubset( var_uid: String, domain_id: String ) = {
+////    dataManager.getSubset( var_uid, getDomain(domain_id) )
+////  }
+//  def getDataSources: Map[String,OperationInputSpec] = dataManager.getDataSources
+//
+//  def async: Boolean = getConfiguration("run").getOrElse("async", "false").toBoolean
+//
+//  def getFragmentSpec( uid: String ): DataFragmentSpec = dataManager.getOperationInputSpec(uid) match {
+//    case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
+//    case Some( inputSpec ) => inputSpec.data
 //  }
-  def getDataSources: Map[String,OperationInputSpec] = dataManager.getDataSources
-
-  def async: Boolean = getConfiguration("run").getOrElse("async", "false").toBoolean
-
-  def getFragmentSpec( uid: String ): DataFragmentSpec = dataManager.getOperationInputSpec(uid) match {
-    case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
-    case Some( inputSpec ) => inputSpec.data
-  }
-
-  def getAxisIndices( uid: String ): AxisIndices = dataManager.getAxisIndices( uid )
-}
+//
+//  def getAxisIndices( uid: String ): AxisIndices = dataManager.getAxisIndices( uid )
+//}
 
 object Kernel {
   def getResultFile( serverConfiguration: Map[String,String], resultId: String, deleteExisting: Boolean = false ): File = {
@@ -144,7 +138,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute( context: ExecutionContext ): ExecutionResult
+  def execute( operation: OperationContext, context: RequestContext, serverContext: ServerContext ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {
@@ -156,6 +150,8 @@ abstract class Kernel {
     </kernel>
   }
 
+  def inputVars( operationCx: OperationContext, requestCx: RequestContext, serverCx: ServerContext ): List[KernelDataInput] = serverCx.inputs(operationCx.inputs.map( requestCx.getInputSpec(_) ) )
+
   def searchForValue( metadata: Map[String,nc2.Attribute], keys: List[String], default_val: String ) : String = {
     keys.length match {
       case 0 => default_val
@@ -166,12 +162,12 @@ abstract class Kernel {
     }
   }
 
-  def saveResult( maskedTensor: Nd4jMaskedTensor, context: ExecutionContext, gridSpec: GridSpec, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
-    context.getConfiguration("run").get("resultId") match {
+  def saveResult( maskedTensor: Nd4jMaskedTensor, request: RequestContext, server: ServerContext, gridSpec: GridSpec, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
+    request.config("resultId") match {
       case None => logger.warn("Missing resultId: can't save result")
       case Some(resultId) =>
         val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
-        val resultFile = Kernel.getResultFile( context.getConfiguration("server"), resultId, true )
+        val resultFile = Kernel.getResultFile( server.getConfiguration, resultId, true )
         val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, resultFile.getAbsolutePath )
         assert(gridSpec.axes.length == maskedTensor.shape.length, "Axes not the same length as data shape in saveResult")
         val dims: IndexedSeq[nc2.Dimension] = (0 until gridSpec.axes.length).map( idim => writer.addDimension(null, gridSpec.axes(idim).name, maskedTensor.shape(idim)))
@@ -191,6 +187,25 @@ abstract class Kernel {
     }
     None
   }
+
+  //  def binArrayOpt = serverContext.getBinnedArrayFactory( operation )
+
+  //
+  //
+  //  //  def getSubset( var_uid: String, domain_id: String ) = {
+  ////    serverContext.getSubset( var_uid, getDomain(domain_id) )
+  ////  }
+  //  def getDataSources: Map[String,OperationInputSpec] = serverContext.getDataSources
+  //
+  //
+  //
+  //  def getFragmentSpec( uid: String ): DataFragmentSpec = serverContext.getOperationInputSpec(uid) match {
+  //    case None => throw new Exception( "Missing Data Fragment Spec: " + uid )
+  //    case Some( inputSpec ) => inputSpec.data
+  //  }
+  //
+  //  def getAxisIndices( uid: String ): AxisIndices = serverContext.getAxisIndices( uid )
+
 }
 
 class KernelModule {

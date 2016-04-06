@@ -246,15 +246,15 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
 
   }
 
-  def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] = {
-    var v: CDSVariable =  dataManager.getVariable( collection, varname )
+  def getVariableMetadata(serverContext: ServerContext): Map[String,nc2.Attribute] = {
+    var v: CDSVariable =  serverContext.getVariable( collection, varname )
     v.attributes ++ Map( "description" -> new nc2.Attribute("description",v.description), "units"->new nc2.Attribute("units",v.units),
       "fullname"->new nc2.Attribute("fullname",v.fullname), "axes" -> new nc2.Attribute("axes",dimensions),
       "varname" -> new nc2.Attribute("varname",varname), "collection" -> new nc2.Attribute("collection",collection) )
   }
 
-  def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] = {
-    var dset: CDSDataset = dataManager.getDataset( collection, varname )
+  def getDatasetMetadata(serverContext: ServerContext): List[nc2.Attribute] = {
+    var dset: CDSDataset = serverContext.getDataset( collection, varname )
     dset.attributes
   }
 
@@ -275,7 +275,7 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
 
 
 object OperationSpecs {
-  def apply( op: OperationContainer ) = new OperationSpecs( op.name, op.getConfiguration("operation") )
+  def apply( op: OperationContext ) = new OperationSpecs( op.name, op.getConfiguration )
 }
 class OperationSpecs( id: String, val optargs: Map[String,String] ) {
   val ids = mutable.HashSet( id )
@@ -285,7 +285,7 @@ class OperationSpecs( id: String, val optargs: Map[String,String] ) {
 }
 
 
-class DataContainer(val uid: String, private val source : Option[DataSource] = None, private val operation : Option[OperationContainer] = None ) extends ContainerBase {
+class DataContainer(val uid: String, private val source : Option[DataSource] = None, private val operation : Option[OperationContext] = None ) extends ContainerBase {
   assert( source.isDefined || operation.isDefined, "Empty DataContainer: variable uid = $uid" )
   assert( source.isEmpty || operation.isEmpty, "Conflicted DataContainer: variable uid = $uid" )
   private val optSpecs = mutable.ListBuffer[ OperationSpecs ]()
@@ -309,7 +309,7 @@ class DataContainer(val uid: String, private val source : Option[DataSource] = N
     operation.get
   }
 
-  def addOpSpec( operation: OperationContainer ): Unit = {
+  def addOpSpec( operation: OperationContext ): Unit = {
     def mergeOpSpec( oSpecList: mutable.ListBuffer[ OperationSpecs ], oSpec: OperationSpecs ): Unit = oSpecList.headOption match {
       case None => oSpecList += oSpec
       case Some(head) => if( head == oSpec ) head merge oSpec else mergeOpSpec(oSpecList.tail,oSpec)
@@ -320,7 +320,7 @@ class DataContainer(val uid: String, private val source : Option[DataSource] = N
 }
 
 object DataContainer extends ContainerBase {
-  def apply( operation: OperationContainer ): DataContainer = {
+  def apply( operation: OperationContext ): DataContainer = {
       new DataContainer( uid=operation.result, operation=Some(operation) )
   }
   def apply(metadata: Map[String, Any]): DataContainer = {
@@ -421,7 +421,7 @@ object DomainContainer extends ContainerBase {
   }
 }
 
-class WorkflowContainer(val operations: Iterable[OperationContainer] = List() ) extends ContainerBase {
+class WorkflowContainer(val operations: Iterable[OperationContext] = List() ) extends ContainerBase {
   override def toString = {
     s"WorkflowContainer { operations = $operations }"
   }
@@ -435,7 +435,7 @@ object WorkflowContainer extends ContainerBase {
     try {
       import nasa.nccs.esgf.utilities.wpsOperationParser
       val parsed_data_inputs = wpsOperationParser.parseOp(metadata("unparsed").toString)
-      new WorkflowContainer( parsed_data_inputs.map(OperationContainer(process_name,_)))
+      new WorkflowContainer( parsed_data_inputs.map(OperationContext(process_name,_)))
     } catch {
       case e: Exception =>
         val msg = "Error creating WorkflowContainer: " + e.getMessage
@@ -445,21 +445,18 @@ object WorkflowContainer extends ContainerBase {
   }
 }
 
-class OperationContainer( val identifier: String, val name: String, val result: String, val inputs: List[String], args: (String,String)* )  extends ContainerBase {
-  val configurations: mutable.Map[ String, Map[String,String] ] = mutable.Map( "operation" -> Map(args:_*) )
-  def addConfiguration( cfg_type: String, cfg_values: Map[String,String] ) =  configurations( cfg_type ) = cfg_values
-  def getConfiguration( cfg_type: String ): Map[String,String] =  configurations.getOrElse( cfg_type, Map.empty() )
-
+class OperationContext( val identifier: String, val name: String, val result: String, val inputs: List[String], private val configuration: Map[String,String] )  extends ContainerBase with ScopeContext  {
+  def getConfiguration = configuration
   override def toString = {
-    s"OperationContainer { id = $identifier,  name = $name, result = $result, inputs = $inputs, configurations = $configurations }"
+    s"OperationContext { id = $identifier,  name = $name, result = $result, inputs = $inputs, configurations = $configuration }"
   }
   override def toXml = {
-    <proc id={identifier} name={name} result={result} inputs={inputs.toString} configurations={configurations.toString}/>
+    <proc id={identifier} name={name} result={result} inputs={inputs.toString} configurations={configuration.toString}/>
   }
 }
 
-object OperationContainer extends ContainerBase {
-  def apply(process_name: String, raw_metadata: Any): OperationContainer = {
+object OperationContext extends ContainerBase  {
+  def apply(process_name: String, raw_metadata: Any): OperationContext = {
     raw_metadata match {
       case (ident: String, args: List[_]) =>
         val varlist = new ListBuffer[String]()
@@ -474,18 +471,18 @@ object OperationContainer extends ContainerBase {
         val ids = ident.split("~").map( _.trim.toLowerCase )
         ids.length match {
           case 1 =>
-            new OperationContainer( identifier = ident, name=process_name, result = ids(0), inputs = varlist.toList, optargs:_* )
+            new OperationContext( identifier = ident, name=process_name, result = ids(0), inputs = varlist.toList, Map(optargs:_*) )
           case 2 =>
             val op_name = if( ids(0).nonEmpty ) ids(0) else process_name
             val identifier = if( ids(0).nonEmpty ) ident else process_name + ident
-            new OperationContainer( identifier = identifier, name = op_name, result = ids(1), inputs = varlist.toList, optargs:_* )
+            new OperationContext( identifier = identifier, name = op_name, result = ids(1), inputs = varlist.toList, Map(optargs:_*) )
           case _ =>
             val msg = "Unrecognized format for Operation id: " + ident
             logger.error(msg)
             throw new Exception(msg)
         }
       case _ =>
-        val msg = "Unrecognized format for OperationContainer: " + raw_metadata.toString
+        val msg = "Unrecognized format for OperationContext: " + raw_metadata.toString
         logger.error(msg)
         throw new Exception(msg)
     }

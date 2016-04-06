@@ -24,8 +24,8 @@ import scala.collection.mutable
 object BoundsRole extends Enumeration { val Start, End = Value }
 
 class KernelDataInput( val dataFragment: PartitionedFragment, val axisIndices: AxisIndices ) {
-  def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] =  dataFragment.getVariableMetadata(dataManager)
-  def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] =  dataFragment.getDatasetMetadata(dataManager)
+  def getVariableMetadata(serverContext: ServerContext): Map[String,nc2.Attribute] =  dataFragment.getVariableMetadata(serverContext)
+  def getDatasetMetadata(serverContext: ServerContext): List[nc2.Attribute] =  dataFragment.getDatasetMetadata(serverContext)
   def getSpec: DataFragmentSpec = dataFragment.fragmentSpec
 }
 
@@ -279,11 +279,11 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragme
 
   def this() = this( new Nd4jMaskedTensor( Nd4j.zeros(0), Float.MaxValue ), new DataFragmentSpec )
 
-  def getVariableMetadata(dataManager: DataManager): Map[String,nc2.Attribute] = {
-    fragmentSpec.getVariableMetadata(dataManager) ++ Map( metaDataVar.map( item => (item._1 -> new Attribute(item._1,item._2)) ) :_* )
+  def getVariableMetadata(serverContext: ServerContext): Map[String,nc2.Attribute] = {
+    fragmentSpec.getVariableMetadata(serverContext) ++ Map( metaDataVar.map( item => (item._1 -> new Attribute(item._1,item._2)) ) :_* )
   }
-  def getDatasetMetadata(dataManager: DataManager): List[nc2.Attribute] = {
-    fragmentSpec.getDatasetMetadata(dataManager)
+  def getDatasetMetadata(serverContext: ServerContext): List[nc2.Attribute] = {
+    fragmentSpec.getDatasetMetadata(serverContext)
   }
 
   override def toString = { "{Fragment: shape = [%s], section = [%s]}".format( array.shape.mkString(","), fragmentSpec.roi.toString ) }

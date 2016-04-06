@@ -18,54 +18,61 @@ trait DataLoader {
   def findEnclosedFragSpecs( fKeyParent: DataFragmentKey, admitEquality: Boolean = true): Set[DataFragmentKey]
 }
 
-case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {}
+trait ScopeContext {
+  def getConfiguration: Map[String,String]
+  def config( key: String, default: String ): String = getConfiguration.getOrElse(key,default)
+  def config( key: String ): Option[String] = getConfiguration.get(key)
+}
 
-class DataManager( val dataLoader: DataLoader ) {
-  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
-  private val uidToSource = TrieMap[String, OperationInputSpec]()
-
-  def getDataSources: Map[String, OperationInputSpec] = uidToSource.toMap
-  def getOperationInputSpec( uid: String ): Option[OperationInputSpec] = uidToSource.get( uid )
-
-  def getAxisIndices( uid: String ): AxisIndices = uidToSource.get(uid) match {
+class RequestContext( val domains: Map[String,DomainContainer], val inputs: Map[String, OperationInputSpec], private val configuration: Map[String,String] ) extends ScopeContext {
+  def getConfiguration = configuration
+  def missing_variable(uid: String) = throw new Exception("Can't find Variable '%s' in uids: [ %s ]".format(uid, inputs.keySet.mkString(", ")))
+  def getDataSources: Map[String, OperationInputSpec] = inputs
+  def getInputSpec( uid: String ): OperationInputSpec = inputs.get( uid ) match {
+    case Some(inputSpec) => inputSpec
+    case None => missing_variable(uid)
+  }
+  def getAxisIndices( uid: String ): AxisIndices = inputs.get(uid) match {
     case Some(inputSpec) => inputSpec.axes
     case None => missing_variable(uid)
   }
+  def getDomain(domain_id: String): DomainContainer = domains.get(domain_id) match {
+    case Some(domain_container) => domain_container
+    case None => throw new Exception("Undefined domain in ExecutionContext: " + domain_id)
+  }
+}
 
-  def getBinnedArrayFactory(operation: OperationContainer): Option[BinnedArrayFactory] = {
-    val uid = operation.inputs.head
-    operation.getConfiguration("operation").get("bins") match {
+case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {}
+
+class ServerContext( val dataLoader: DataLoader, private val configuration: Map[String,String] )  extends ScopeContext {
+  val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
+  def getConfiguration = configuration
+
+  def getBinnedArrayFactory(operationCx: OperationContext, requestCx: RequestContext): Option[BinnedArrayFactory] = {
+    val uid = operationCx.inputs.head
+    operationCx.config("bins") match {
       case None => None
-      case Some(binSpec) => Option(BinnedArrayFactory(binSpec, getVariable(uid) ))
+      case Some(binSpec) => Option(BinnedArrayFactory(binSpec, getVariable( requestCx.getInputSpec(uid).data ) ) )
     }
   }
-
-  def missing_variable(uid: String) = {
-    throw new Exception("Can't find Variable '%s' in uids: [ %s ]".format(uid, uidToSource.keySet.mkString(", ")))
-  }
-
+  def inputs( inputSpecs: List[OperationInputSpec] ): List[KernelDataInput] = for( inputSpec <- inputSpecs ) yield new KernelDataInput( getVariableData(inputSpec.data), inputSpec.axes )
   def getVariable(fragSpec: DataFragmentSpec ): CDSVariable = dataLoader.getVariable( fragSpec.collection, fragSpec.varname )
   def getVariable(collection: String, varname: String ): CDSVariable = dataLoader.getVariable( collection, varname )
+  def getVariableData( fragSpec: DataFragmentSpec ): PartitionedFragment = dataLoader.getFragment( fragSpec )
 
   def getDataset(collection: String, varname: String ): CDSDataset = dataLoader.getDataset( collection, varname )
 
-  def getVariable(uid: String): CDSVariable = {
-    uidToSource.get(uid) match {
-      case Some(inputSpec) => getVariable( inputSpec.data.collection, inputSpec.data.varname )
-      case None => missing_variable(uid)
-    }
-  }
 
-  def computeAxisSpecs( uid: String, axisConf: List[OperationSpecs] ): AxisIndices = {
-    val variable: CDSVariable = getVariable(uid)
+  def computeAxisSpecs( fragSpec: DataFragmentSpec, axisConf: List[OperationSpecs] ): AxisIndices = {
+    val variable: CDSVariable = getVariable(fragSpec)
     variable.getAxisIndices( axisConf )
   }
 
-  def getSubset( var_uid: String, baseFragmentSpec: DataFragmentSpec, new_domain_container: DomainContainer ): PartitionedFragment = {
+  def getSubset( fragSpec: DataFragmentSpec, new_domain_container: DomainContainer ): PartitionedFragment = {
     val t0 = System.nanoTime
-    val baseFragment = dataLoader.getFragment( baseFragmentSpec )
+    val baseFragment = dataLoader.getFragment( fragSpec )
     val t1 = System.nanoTime
-    val variable = getVariable( var_uid )
+    val variable = getVariable( fragSpec )
     val newFragmentSpec = variable.createFragmentSpec( new_domain_container.axes )
     val rv = baseFragment.cutIntersection( newFragmentSpec.roi )
     val t2 = System.nanoTime
@@ -73,12 +80,7 @@ class DataManager( val dataLoader: DataLoader ) {
     rv
   }
 
-  def getVariableData( uid: String ): PartitionedFragment = {
-    uidToSource.get(uid) match {
-      case Some(inputSpec) => dataLoader.getFragment( inputSpec.data )
-      case None => missing_variable(uid)
-    }
-  }
+
 //
 //  def getSubset(uid: String, domain_container: DomainContainer): PartitionedFragment = {
 //    uidToSource.get(uid) match {
@@ -93,19 +95,18 @@ class DataManager( val dataLoader: DataLoader ) {
 //
 
 
-  def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): PartitionedFragment = {
+  def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): (String, OperationInputSpec) = {
     val data_source: DataSource = dataContainer.getSource
     val t0 = System.nanoTime
     val variable = dataLoader.getVariable(data_source.collection, data_source.name)
     val t1 = System.nanoTime
     val axisSpecs: AxisIndices = variable.getAxisIndices( dataContainer.getOpSpecs )
     val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
-    uidToSource += ( dataContainer.uid -> new OperationInputSpec( fragmentSpec, axisSpecs )  )
     val t2 = System.nanoTime
-    val rv = dataLoader.getFragment( fragmentSpec, 0.3f )
+    dataLoader.getFragment( fragmentSpec, 0.3f )
     val t3 = System.nanoTime
     logger.info( " loadVariableDataT: %.4f %.4f ".format( (t1-t0)/1.0E9, (t3-t2)/1.0E9 ) )
-    rv
+    return ( dataContainer.uid -> new OperationInputSpec( fragmentSpec, axisSpecs )  )
   }
 }
 
