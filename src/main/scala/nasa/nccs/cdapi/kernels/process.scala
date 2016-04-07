@@ -222,13 +222,13 @@ class KernelModule {
   val organization = ""
   val author = ""
   val contact = ""
-  val kernelMap: Map[String,Kernel] = Map(getKernelObjects.map( kernel => kernel.operation -> kernel ): _*)
+  val kernelMap: Map[String,Kernel] = Map(getKernelObjects.map( kernel => kernel.operation.toLowerCase -> kernel ): _*)
 
   def getKernelClasses = getInnerClasses.filter( _.getSuperclass.getName.split('.').last == "Kernel"  )
   def getInnerClasses = this.getClass.getClasses.toList
   def getKernelObjects = getKernelClasses.map( _.getDeclaredConstructors()(0).newInstance(this).asInstanceOf[Kernel] )
 
-  def getKernel( kernelName: String ): Option[Kernel] = kernelMap.get( kernelName )
+  def getKernel( kernelName: String ): Option[Kernel] = kernelMap.get( kernelName.toLowerCase )
   def getKernelNames: List[String] = kernelMap.keys.toList
 
   def toXml = {
