@@ -138,7 +138,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute( operationCx: OperationContext, requestCx: RequestContext, serverCx: ServerContext ): ExecutionResult
+  def execute( operationCx: OperationContext, requestCx: RequestContext, serverCx: ServerContext   ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {
