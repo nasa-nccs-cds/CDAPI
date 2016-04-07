@@ -138,7 +138,7 @@ abstract class Kernel {
   val identifier: String = ""
   val metadata: String = ""
 
-  def execute( operation: OperationContext, context: RequestContext, serverContext: ServerContext ): ExecutionResult
+  def execute( operationCx: OperationContext, requestCx: RequestContext, serverCx: ServerContext ): ExecutionResult
   def toXmlHeader =  <kernel module={module} name={name}> { if (description.nonEmpty) <description> {description} </description> } </kernel>
 
   def toXml = {
@@ -178,6 +178,10 @@ abstract class Kernel {
         try {
           writer.create()
           writer.write( variable, maskedTensor.ma2Data )
+//          for( dim <- dims ) {
+//            val dimvar: nc2.Variable = writer.addVariable(null, dim.getFullName, ma2.DataType.FLOAT, List(dim) )
+//            writer.write( dimvar, dimdata )
+//          }
           writer.close()
           println( "Writing result %s to file '%s'".format(resultId,resultFile.getAbsolutePath) )
           Some(resultId)
