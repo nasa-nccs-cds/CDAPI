@@ -67,12 +67,22 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
 
   def slice( slice_index: Int, dimension: Int = 0 ): Nd4jMaskedTensor = new Nd4jMaskedTensor( dataslice(slice_index,dimension), invalid )
 
-  def execAccumulatorOp(op: TensorAccumulatorOp, dimensions: Int*): Nd4jMaskedTensor = {
+  def execAccumulatorOp(op: TensorAccumulatorOp1, dimensions: Int*): Nd4jMaskedTensor = {
     assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
-    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.contains(x)) None else Some(shape(x)))
+    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).map(x => if (dimensions.contains(x)) 1 else shape(x))
+//    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.contains(x)) None else Some(shape(x)))
     val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
-    new Nd4jMaskedTensor( slices.reshape(filtered_shape :+ op.length: _* ), invalid )
+    new Nd4jMaskedTensor( slices.reshape(filtered_shape: _* ), invalid )
   }
+
+//  def execAccumulatorOp(op: TensorAccumulatorOpN, dimensions: Int*): List[Nd4jMaskedTensor] = {     // Experimental & Untested!!
+//    assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
+//    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).map(x => if (dimensions.contains(x)) 1 else shape(x))
+//    //    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.contains(x)) None else Some(shape(x)))
+//    val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
+//    val reshaped_slices = slices.reshape(filtered_shape :+ op.length: _* )
+//    (0 until op.length).map( iR => new Nd4jMaskedTensor( reshaped_slices(iR), invalid ) )
+//  }
 
   def maskedBin( dimension: Int, binFactory: BinnedArrayFactory ): Option[Nd4jMaskedTensor] = {
     val bins: IBinnedSliceArray = cdsutils.time( logger, "getBinnedArray" ) { binFactory.getBinnedArray }
@@ -88,7 +98,16 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
     new Nd4jMaskedTensor( tensor.tensorAlongDimension(index, dimensions:_*), invalid )    // List all varying dimensions, index applied to non-varying dimensions.
   }
 
-  def accumulate( op: TensorAccumulatorOp ): Array[Float] = {
+  def accumulate( op: TensorAccumulatorOp1 ): Array[Float] = {
+    op.init
+    ( 0 until tensor.length ).foreach( iC =>  {
+      val v = tensor.getFloat(iC)
+      if( v != invalid ) op.insert(v)
+    } )
+    Array(op.result)
+  }
+
+  def accumulate( op: TensorAccumulatorOpN ): Array[Float] = {
     op.init
     ( 0 until tensor.length ).foreach( iC =>  {
       val v = tensor.getFloat(iC)
