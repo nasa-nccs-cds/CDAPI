@@ -71,8 +71,7 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
     assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
     val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.contains(x)) None else Some(shape(x)))
     val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
-    slices.reshape(filtered_shape :+ op.length: _* )
-    new Nd4jMaskedTensor( slices, invalid )
+    new Nd4jMaskedTensor( slices.reshape(filtered_shape :+ op.length: _* ), invalid )
   }
 
   def maskedBin( dimension: Int, binFactory: BinnedArrayFactory ): Option[Nd4jMaskedTensor] = {
