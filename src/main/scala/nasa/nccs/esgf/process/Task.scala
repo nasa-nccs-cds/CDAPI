@@ -52,7 +52,7 @@ class TaskRequest(val name: String, val variableMap : Map[String,DataContainer],
         throw new Exception( s"Error, Missing domain $domid in variable $vid" )
       }
     }
-    for (workflow <- workflows; operation <- workflow.operations; opid = operation.name; var_arg <- operation.inputs) {
+    for (workflow <- workflows; operation <- workflow.operations; opid = operation.name; var_arg <- operation.inputs; if !var_arg.isEmpty ) {
       if (!variableMap.contains(var_arg)) {
         var keylist = variableMap.keys.mkString("[", ",", "]")
         logger.error(s"Error, No $var_arg in $keylist in operation $opid")
@@ -95,9 +95,9 @@ object TaskRequest {
   val logger = LoggerFactory.getLogger( this.getClass )
   def apply(process_name: String, datainputs: Map[String, Seq[Map[String, Any]]]) = {
     logger.info( "TaskRequest--> process_name: %s, datainputs: %s".format( process_name, datainputs.toString ) )
-    val data_list = datainputs.getOrElse("variable", List()).map(DataContainer(_)).toList
+    val data_list = datainputs.getOrElse("variable", List() ).map(DataContainer(_)).toList
     val domain_list = datainputs.getOrElse("domain", List()).map(DomainContainer(_)).toList
-    val operation_list = datainputs.getOrElse("operation", List()).map(WorkflowContainer(process_name,_)).toList
+    val operation_list = datainputs.getOrElse("operation", List(Map("unparsed"->"()"))).map(WorkflowContainer(process_name,_)).toList
     val variableMap = buildVarMap( data_list, operation_list )
     val domainMap = buildDomainMap( domain_list )
     new TaskRequest( process_name, variableMap, domainMap, operation_list )
@@ -109,7 +109,7 @@ object TaskRequest {
     for( workflow_container<- workflow; operation<-workflow_container.operations; if !operation.result.isEmpty ) var_items += ( operation.result -> DataContainer(operation) )
     val var_map = var_items.toMap[String,DataContainer]
     logger.info( "Created Variable Map: " + var_map.toString )
-    for( workflow_container<- workflow; operation<-workflow_container.operations; vid<-operation.inputs  ) var_map.get( vid ) match {
+    for( workflow_container<- workflow; operation<-workflow_container.operations; vid<-operation.inputs; if(!vid.isEmpty)  ) var_map.get( vid ) match {
       case Some(data_container) => data_container.addOpSpec( operation )
       case None => throw new Exception( "Unrecognized variable %s in varlist [%s]".format( vid, var_map.keys.mkString(",") ) )
     }
@@ -190,6 +190,7 @@ class DataSource( val name: String, val collection: String, val domain: String )
   def this( dsource: DataSource ) = this( dsource.name, dsource.collection, dsource.domain )
   override def toString =  s"DataSource { name = $name, collection = $collection, domain = $domain }"
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
+  def isDefined = ( !collection.isEmpty && !name.isEmpty )
 }
 
 class DataFragmentKey( val varname: String, val collection: String, val origin: Array[Int], val shape: Array[Int] ) {
@@ -298,7 +299,8 @@ class DataContainer(val uid: String, private val source : Option[DataSource] = N
     val embedded_xml = if ( source.isDefined ) source.get.toXml else operation.get.toXml
     <dataset uid={uid}> embedded_xml </dataset>
   }
-  def isSource = source.isDefined
+  def isSource = source.isDefined && source.get.isDefined
+
   def isOperation = operation.isDefined
   def getSource = {
     assert( isSource, s"Attempt to access an operation based DataContainer($uid) as a data source")
@@ -325,12 +327,13 @@ object DataContainer extends ContainerBase {
   }
   def apply(metadata: Map[String, Any]): DataContainer = {
     try {
-      val uri = filterMap(metadata, key_equals("uri"))
-      val fullname = filterMap(metadata, key_equals("name"))
-      val domain = filterMap(metadata, key_equals("domain"))
+      val uri = filterMap(metadata, key_equals("uri")) match { case None => ""; case x => x }
+      val fullname = filterMap(metadata, key_equals("name")) match { case None => ""; case x => x }
+      val domain = filterMap(metadata, key_equals("domain")) match { case None => ""; case x => x }
       val name_items = fullname.toString.split(':')
-      val collection = parseUri( uri.toString )
-      val dsource = new DataSource( normalize(name_items.head), normalize(collection), normalize(domain.toString) )
+      val collection = uri match { case None => ""; case uri_val => parseUri( uri_val.toString ) }
+      val dsname = normalize(name_items.head)
+      val dsource = new DataSource( dsname, normalize(collection), normalize(domain.toString) )
       new DataContainer(normalize(name_items.last), source = Some(dsource) )
     } catch {
       case e: Exception =>

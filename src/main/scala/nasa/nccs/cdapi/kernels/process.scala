@@ -40,6 +40,14 @@ class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmen
     <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.invalid.toString}> {result_tensor.data.mkString(",")}  </data>  </result>
   }
 }
+
+class XmlExecutionResult( val id: String,  val responseXml: xml.Node ) extends ExecutionResult {
+  def toXml = {
+    val idToks = id.split('~')
+    <result id={idToks(1)} op={idToks(0)}> { responseXml }  </result>
+  }
+}
+
 // cdsutils.cdata(
 
 class AsyncExecutionResult( val results: List[String] )  extends ExecutionResult  {

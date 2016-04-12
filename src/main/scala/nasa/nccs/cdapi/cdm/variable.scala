@@ -13,7 +13,6 @@ import ucar.nc2.time.{CalendarDate, CalendarDateRange}
 import nasa.nccs.esgf.process._
 import ucar.{ma2, nc2}
 import ucar.nc2.dataset.{CoordinateAxis1D, _}
-import ucar.nc2.Attribute
 import ucar.nc2.constants.AxisType
 
 import scala.collection.JavaConversions._
@@ -68,6 +67,12 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   def getAttributeValue( key: String, default_value: String  ) =  attributes.get( key ) match { case Some( attr_val ) => attr_val.toString.split('=').last; case None => default_value }
   override def toString = "\nCDSVariable(%s) { description: '%s', shape: %s, dims: %s, }\n  --> Variable Attributes: %s".format(name, description, shape.mkString("[", " ", "]"), dims.mkString("[", ",", "]"), attributes.mkString("\n\t\t", "\n\t\t", "\n"))
   def normalize(sval: String): String = sval.stripPrefix("\"").stripSuffix("\"").toLowerCase
+  def toXml: xml.Node =
+    <variable name={name} fullname={fullname} description={description} shape={shape.mkString("[", " ", "]")} units={units}>
+      { for( dim: nc2.Dimension <- dims; name=dim.getFullName; dlen=dim.getLength ) yield  <dimension name={name} length={dlen.toString}/>  }
+      { for( name <- attributes.keys ) yield <attribute name={name}> { attributes.getOrElse(name,"").toString }</attribute> }
+    </variable>
+    // dims: %s, }\n  --> Variable Attributes: %s".format(name, description, shape.mkString("[", " ", "]"), dims.mkString("[", ",", "]"), attributes.mkString("\n\t\t", "\n\t\t", "\n"))
 
   def getCoordinateAxes: List[ CoordinateAxis1D ] = {
     ncVariable.getDimensions.map( dim => toCoordAxis1D( dataset.ncDataset.findCoordinateAxis( dim.getFullName ) ) ).toList
@@ -280,7 +285,7 @@ class PartitionedFragment( array: Nd4jMaskedTensor, val fragmentSpec: DataFragme
   def this() = this( new Nd4jMaskedTensor( Nd4j.zeros(0), Float.MaxValue ), new DataFragmentSpec )
 
   def getVariableMetadata(serverContext: ServerContext): Map[String,nc2.Attribute] = {
-    fragmentSpec.getVariableMetadata(serverContext) ++ Map( metaDataVar.map( item => (item._1 -> new Attribute(item._1,item._2)) ) :_* )
+    fragmentSpec.getVariableMetadata(serverContext) ++ Map( metaDataVar.map( item => (item._1 -> new nc2.Attribute(item._1,item._2)) ) :_* )
   }
   def getDatasetMetadata(serverContext: ServerContext): List[nc2.Attribute] = {
     fragmentSpec.getDatasetMetadata(serverContext)
