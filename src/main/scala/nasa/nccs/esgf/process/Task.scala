@@ -36,11 +36,12 @@ class TaskRequest(val name: String, val variableMap : Map[String,DataContainer],
     errorReports += error_rep
   }
 
-  def getDomain( data_source: DataSource ): DomainContainer= {
-    domainMap.get(data_source.domain) match {
-      case Some(domain_container) => domain_container
-      case None =>
-        throw new Exception("Undefined domain for dataset " + data_source.name + ", domain = " + data_source.domain)
+  def getDomain( data_source: DataSource ): Option[DomainContainer] = {
+    data_source.domain match {
+      case "" => None
+      case domain =>
+        assert( domainMap.contains( domain ), "Undefined domain for dataset " + data_source.name + ", domain = " + data_source.domain )
+        domainMap.get( domain )
     }
   }
 
@@ -148,9 +149,9 @@ class ContainerBase {
   }
 
   //  def key_equals( key_expr: Iterable[Any] )( map_item: (String, Any) ): Boolean = { key_expr.map( key_equals(_)(map_item) ).find( ((x:Boolean) => x) ) }
-  def filterMap(raw_metadata: Map[String, Any], key_matcher: (((String, Any)) => Boolean)): Any = {
+  def filterMap(raw_metadata: Map[String, Any], key_matcher: (((String, Any)) => Boolean)): Option[Any] = {
     raw_metadata.find(key_matcher) match {
-      case Some(x) => x._2;
+      case Some(x) => Some(x._2)
       case None => None
     }
   }
@@ -191,6 +192,7 @@ class DataSource( val name: String, val collection: String, val domain: String )
   override def toString =  s"DataSource { name = $name, collection = $collection, domain = $domain }"
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
   def isDefined = ( !collection.isEmpty && !name.isEmpty )
+  def isReadable = ( !collection.isEmpty && !name.isEmpty && !domain.isEmpty )
 }
 
 class DataFragmentKey( val varname: String, val collection: String, val origin: Array[Int], val shape: Array[Int] ) {
@@ -327,13 +329,11 @@ object DataContainer extends ContainerBase {
   }
   def apply(metadata: Map[String, Any]): DataContainer = {
     try {
-      val uri = filterMap(metadata, key_equals("uri")) match { case None => ""; case x => x }
-      val fullname = filterMap(metadata, key_equals("name")) match { case None => ""; case x => x }
-      val domain = filterMap(metadata, key_equals("domain")) match { case None => ""; case x => x }
+      val uri = filterMap(metadata, key_equals("uri")) match { case None => ""; case Some(x) => x.toString }
+      val fullname = filterMap(metadata, key_equals("name")) match { case None => ""; case Some(x) => x.toString }
+      val domain = filterMap(metadata, key_equals("domain")) match { case None => ""; case Some(x) => x.toString }
       val name_items = fullname.toString.split(':')
-      val collection = uri match { case None => ""; case uri_val => parseUri( uri_val.toString ) }
-      val dsname = normalize(name_items.head)
-      val dsource = new DataSource( dsname, normalize(collection), normalize(domain.toString) )
+      val dsource = new DataSource( normalize(name_items.head), normalize( parseUri( uri ) ), normalize(domain) )
       new DataContainer(normalize(name_items.last), source = Some(dsource) )
     } catch {
       case e: Exception =>
@@ -343,10 +343,12 @@ object DataContainer extends ContainerBase {
     }
   }
   def parseUri( uri: String ): String = {
-    val uri_parts = uri.split("://")
-    val url_type = normalize( uri_parts.head )
-    if( ( url_type == "collection" ) && ( uri_parts.length == 2 ) ) uri_parts.last
-    else throw new Exception( "Unrecognized uri format: " + uri + ", type = " + uri_parts.head + ", nparts = " + uri_parts.length.toString + ", value = " + uri_parts.last )
+    if(uri.isEmpty) "" else {
+      val uri_parts = uri.split("://")
+      val url_type = normalize(uri_parts.head)
+      if ((url_type == "collection") && (uri_parts.length == 2)) uri_parts.last
+      else throw new Exception("Unrecognized uri format: " + uri + ", type = " + uri_parts.head + ", nparts = " + uri_parts.length.toString + ", value = " + uri_parts.last)
+    }
   }
 }
 
@@ -368,16 +370,16 @@ object DomainAxis extends ContainerBase {
     Some( new DomainAxis(  axistype, start, end, "indices" ) )
   }
 
-  def apply( axistype: Type.Value, axis_spec: Any ): Option[DomainAxis] = {
+  def apply( axistype: Type.Value, axis_spec: Option[Any] ): Option[DomainAxis] = {
     axis_spec match {
-      case generic_axis_map: Map[_,_] =>
+      case Some(generic_axis_map: Map[_,_]) =>
         val axis_map = getStringKeyMap( generic_axis_map )
         val start = getGenericNumber( axis_map.get("start") )
         val end = getGenericNumber( axis_map.get("end") )
         val system = getStringValue( axis_map.get("system") )
         val bounds = getStringValue( axis_map.get("bounds") )
         Some( new DomainAxis( axistype, start, end, normalize(system), normalize(bounds) ) )
-      case sval: String =>
+      case Some(sval: String) =>
         val gval = getGenericNumber( Some(sval) )
         Some( new DomainAxis( axistype, gval, gval, "values" ) )
       case None => None
@@ -406,7 +408,7 @@ object DomainContainer extends ContainerBase {
   def apply(metadata: Map[String, Any]): DomainContainer = {
     var items = new ListBuffer[ Option[DomainAxis] ]()
     try {
-      val name = filterMap(metadata, key_equals("name"))
+      val name = filterMap(metadata, key_equals("name")) match { case None => ""; case Some(x) => x.toString }
       items += DomainAxis( DomainAxis.Type.Lat, filterMap(metadata,  key_equals( wpsNameMatchers.latAxis )))
       items += DomainAxis( DomainAxis.Type.Lon, filterMap(metadata,  key_equals( wpsNameMatchers.lonAxis )))
       items += DomainAxis( DomainAxis.Type.Lev, filterMap(metadata,  key_equals( wpsNameMatchers.levAxis )))

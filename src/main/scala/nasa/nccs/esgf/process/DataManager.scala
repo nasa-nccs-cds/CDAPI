@@ -95,15 +95,20 @@ class ServerContext( val dataLoader: DataLoader, private val configuration: Map[
 //
 
 
-  def loadVariableData( dataContainer: DataContainer, domain_container: DomainContainer ): (String, OperationInputSpec) = {
+  def loadVariableData( dataContainer: DataContainer, domain_container_opt: Option[DomainContainer] ): (String, OperationInputSpec) = {
     val data_source: DataSource = dataContainer.getSource
     val t0 = System.nanoTime
     val variable = dataLoader.getVariable(data_source.collection, data_source.name)
     val t1 = System.nanoTime
     val axisSpecs: AxisIndices = variable.getAxisIndices( dataContainer.getOpSpecs )
-    val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
     val t2 = System.nanoTime
-    dataLoader.getFragment( fragmentSpec, 0.3f )
+    val fragmentSpec = domain_container_opt match {
+      case Some(domain_container) =>
+        val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
+        dataLoader.getFragment( fragmentSpec, 0.3f )
+        fragmentSpec
+      case None => variable.createFragmentSpec()
+    }
     val t3 = System.nanoTime
     logger.info( " loadVariableDataT: %.4f %.4f ".format( (t1-t0)/1.0E9, (t3-t2)/1.0E9 ) )
     return ( dataContainer.uid -> new OperationInputSpec( fragmentSpec, axisSpecs )  )

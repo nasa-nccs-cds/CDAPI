@@ -11,7 +11,7 @@ import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.indexing.{INDArrayIndex, NDArrayIndex}
 import ucar.nc2.time.{CalendarDate, CalendarDateRange}
 import nasa.nccs.esgf.process._
-import ucar.{ma2, nc2}
+import ucar.{ma2, nc2, unidata}
 import ucar.nc2.dataset.{CoordinateAxis1D, _}
 import ucar.nc2.constants.AxisType
 
@@ -67,10 +67,11 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   def getAttributeValue( key: String, default_value: String  ) =  attributes.get( key ) match { case Some( attr_val ) => attr_val.toString.split('=').last; case None => default_value }
   override def toString = "\nCDSVariable(%s) { description: '%s', shape: %s, dims: %s, }\n  --> Variable Attributes: %s".format(name, description, shape.mkString("[", " ", "]"), dims.mkString("[", ",", "]"), attributes.mkString("\n\t\t", "\n\t\t", "\n"))
   def normalize(sval: String): String = sval.stripPrefix("\"").stripSuffix("\"").toLowerCase
+  def getAttributeValue( name: String ): String =  attributes.getOrElse(name, new nc2.Attribute(new unidata.util.Parameter("",""))).getValue(0).toString
   def toXml: xml.Node =
     <variable name={name} fullname={fullname} description={description} shape={shape.mkString("[", " ", "]")} units={units}>
       { for( dim: nc2.Dimension <- dims; name=dim.getFullName; dlen=dim.getLength ) yield  <dimension name={name} length={dlen.toString}/>  }
-      { for( name <- attributes.keys ) yield <attribute name={name}> { attributes.getOrElse(name,"").toString }</attribute> }
+      { for( name <- attributes.keys ) yield <attribute name={name}> { getAttributeValue(name) }</attribute> }
     </variable>
     // dims: %s, }\n  --> Variable Attributes: %s".format(name, description, shape.mkString("[", " ", "]"), dims.mkString("[", ",", "]"), attributes.mkString("\n\t\t", "\n\t\t", "\n"))
 
@@ -232,6 +233,8 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     }
     new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), ncVariable.getUnitsString, getAttributeValue( "long_name", ncVariable.getFullName ), getSubSection(roi), partitions.toArray )
   }
+
+  def createFragmentSpec() = new DataFragmentSpec( name, dataset.name )
 
   def loadPartition( fragmentSpec : DataFragmentSpec, axisConf: List[OperationSpecs] ): PartitionedFragment = {
     val partition = fragmentSpec.partitions.head
