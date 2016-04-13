@@ -21,6 +21,7 @@ object Library {
   val nd4j           =  "org.nd4j"          % "nd4j-x86"        % "0.4-rc3.8"
   val joda           = "joda-time"          % "joda-time"       % "2.8.1"
   val natty          = "com.joestelmach"    % "natty"           % "0.11"
+  val geotools       = "org.geotools"      %  "gt-shapefile"    % "13.2"
   val netcdfAll      = "edu.ucar"           % "netcdfAll"       % "4.6.3"
 }
 
@@ -32,6 +33,8 @@ object Dependencies {
   val ndarray = Seq( nd4s, nd4j )
 
   val netcdf = Seq( netcdfAll )
+
+  val geo  = Seq( geotools )
 }
 
 
