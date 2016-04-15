@@ -91,15 +91,10 @@ object maskPointsTest extends App {
 //  val oceanShapeUrl=getClass.getResource("/shapes/110m/ocean/ne_110m_ocean.shp")
   val oceanShapeUrl = getClass.getResource("/shapes/ocean50m/ne_50m_ocean.shp")
   val geotools = new GeoTools()
-  val mask_geom_opt: Option[geom.Geometry] = geotools.readShapefile1(oceanShapeUrl.getPath())
-  mask_geom_opt match {
-    case Some(mask_geom) =>
-      val envelope = mask_geom.getEnvelopeInternal
-      for (y <- (-85 to 85 by 10); test_point = Array[Float](20, y)) {
-        val test_result = geotools.testPoint(mask_geom, test_point)
-        println("Test Point: (%s), mask contains point: %s".format(test_point.mkString(","), test_result.toString))
-      }
-    case None => println("No data in shapefile")
+  val mask_geom: geom.MultiPolygon = geotools.readShapefile(oceanShapeUrl.getPath())
+  for (y <- (-85 to 85 by 10); test_point = Array[Float](20, y)) {
+    val test_result = geotools.testPoint(mask_geom, test_point)
+    println("Test Point: (%s), mask contains point: %s".format(test_point.mkString(","), test_result.toString))
   }
 }
 
