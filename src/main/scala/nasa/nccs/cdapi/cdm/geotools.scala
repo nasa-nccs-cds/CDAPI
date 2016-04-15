@@ -16,40 +16,21 @@ class GeoTools( val SRID: Int = 4326 ) {
   val bTrue: Byte = 1
   val bFalse: Byte = 0
 
-  def readShapefile1( filePath: String ): Option[geom.Geometry] = {
-    val in = new ShpFiles( filePath )
-    val r: ShapefileReader = new ShapefileReader( in, false, false, geometryFactory  )
-    var geoResultOpt = if ( r.hasNext() ) r.nextRecord().shape() match { case mgeo: geom.Geometry => Some( mgeo ); case x => None } else None
-    r.close()
-    geoResultOpt
-  }
-
-  def readShapefileU( filePath: String ): Option[geom.Geometry] = {
-    val in = new ShpFiles( filePath )
-    val r: ShapefileReader = new ShapefileReader( in, false, false, geometryFactory  )
-    var geoResultOpt: Option[geom.Geometry] = None
+  def readShapefile(filePath: String): geom.MultiPolygon = {
+    val in = new ShpFiles(filePath)
+    val r: ShapefileReader = new ShapefileReader(in, false, false, geometryFactory)
+    val polyList = new ListBuffer[geom.Polygon]()
     while (r.hasNext()) r.nextRecord().shape() match {
-      case mgeo: geom.Geometry =>
-        for( ig <- (0 until mgeo.getNumGeometries); geo = mgeo.getGeometryN(ig) ) geoResultOpt match {
-          case None => geoResultOpt = Some(geo)
-          case Some( geoResult: geom.Geometry ) => geoResult.union(geo)
-        }
+      case poly: geom.Polygon => polyList += poly
+      case mpoly: geom.MultiPolygon => for (ig <- (0 until mpoly.getNumGeometries); geo = mpoly.getGeometryN(ig)) geo match {
+        case poly: geom.Polygon => polyList += poly
+      }
     }
     r.close()
-    geoResultOpt
-  }
-  def readShapefileN( filePath: String ): List[geom.Geometry] = {
-    val in = new ShpFiles( filePath )
-    val r: ShapefileReader = new ShapefileReader( in, false, false, geometryFactory  )
-    val geoResultOpt = new ListBuffer[geom.Geometry]()
-    while (r.hasNext()) r.nextRecord().shape() match {
-      case mgeo: geom.Geometry => geoResultOpt += mgeo
-    }
-    r.close()
-    geoResultOpt.toList
+    new geom.MultiPolygon(polyList.toArray,geometryFactory)
   }
 
-  def mpolysContain( mpolys: List[geom.MultiPolygon], x: Float, y: Float ): Byte = {
+  def mpolysContain( mpolys: List[geom.Geometry], x: Float, y: Float ): Byte = {
     val point = geometryFactory.createPoint(new geom.Coordinate(x,y))
     for( mpoly <- mpolys ) if( mpoly.contains(point) ) return bTrue
     return bFalse
@@ -62,7 +43,7 @@ class GeoTools( val SRID: Int = 4326 ) {
     geometryFactory.createMultiPoint( geoPts.toArray )
   }
 
-  def getMaskSlow( boundary: List[geom.MultiPolygon], bounds: Array[Float], shape: Array[Int] ): Array[Byte] = {
+  def getMaskSlow( boundary: List[geom.Geometry], bounds: Array[Float], shape: Array[Int] ): Array[Byte] = {
     val dx = (bounds(1)-bounds(0))/shape(0)
     val dy = (bounds(3)-bounds(2))/shape(1)
     val mask = for( ix <- (0 until shape(0)); iy <- (0 until shape(1)); x = bounds(0)+ix*dx; y = bounds(2)+iy*dy ) yield mpolysContain( boundary, x, y )
@@ -87,16 +68,16 @@ class GeoTools( val SRID: Int = 4326 ) {
       }
   }
 
-  def getMask( boundary: List[geom.Geometry], bounds: Array[Float], shape: Array[Int] ): Array[Byte]  = {
+  def getMask( boundary: geom.MultiPolygon, bounds: Array[Float], shape: Array[Int] ): Array[Byte]  = {
     val grid: geom.MultiPoint = getGrid( bounds, shape )
-    val mask_buffer:  Array[Byte]  = boundary.head.intersection(grid) match {
+    val mask_buffer:  Array[Byte]  = boundary.intersection(grid) match {
       case mask_mpt: geom.MultiPoint => pointsToMask ( grid, mask_mpt )
       case x => throw new Exception( "Unexpected result type from grid intersection: " + x.getClass.getCanonicalName )
     }
     mask_buffer
   }
 
-  def getMaskArray( boundary: List[geom.Geometry], bounds: Array[Float], shape: Array[Int] ): ma2.Array  =
+  def getMaskArray( boundary: geom.MultiPolygon, bounds: Array[Float], shape: Array[Int] ): ma2.Array  =
     ma2.Array.factory( ma2.DataType.BYTE, shape, ByteBuffer.wrap( getMask( boundary, bounds, shape ) ) )
 
   def testPoint(  mask_geom: geom.Geometry, testpoint: Array[Float] ): Boolean = {
@@ -128,7 +109,7 @@ object maskGridTest extends App {
   val geotools = new GeoTools()
   val shape = Array(360,180)
   val t0 = System.nanoTime
-  val mask_geom: List[geom.Geometry] = geotools.readShapefileN( oceanShapeUrl.getPath() )
+  val mask_geom: geom.MultiPolygon = geotools.readShapefile( oceanShapeUrl.getPath() )
   val t1 = System.nanoTime
 
 //  val mask1: Array[Byte]  = geotools.getMask( mask_geom, Array(0f,360f,-89.5f,90.5f), Array(360,180) )
