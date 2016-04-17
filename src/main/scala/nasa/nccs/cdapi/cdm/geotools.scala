@@ -39,7 +39,7 @@ class GeoTools( val SRID: Int = 4326 ) {
   def getGrid( bounds: Array[Float], shape: Array[Int] ): geom.MultiPoint = {
     val dx = (bounds(1)-bounds(0))/shape(0)
     val dy = (bounds(3)-bounds(2))/shape(1)
-    val geoPts: IndexedSeq[geom.Coordinate] = for( ix <- (0 until shape(0)); x = bounds(0)+ix*dx; iy <- (0 until shape(1)); y = bounds(2)+iy*dy  ) yield new geom.Coordinate(x,y)
+    val geoPts: IndexedSeq[geom.Coordinate] = for( ix <- (0 until shape(0));  iy <- (0 until shape(1)); x = bounds(0)+ix*dx; y = bounds(2)+iy*dy  ) yield new geom.Coordinate(x,y)
     geometryFactory.createMultiPoint( geoPts.toArray )
   }
 
@@ -59,7 +59,7 @@ class GeoTools( val SRID: Int = 4326 ) {
     mask.toArray
   }
 
-  def pointsToMask(grid: geom.MultiPoint, mask_points: geom.MultiPoint): Array[Byte] = {
+  def orderedPointsToMask(grid: geom.MultiPoint, mask_points: geom.MultiPoint): Array[Byte] = {
     val mask_coords = mask_points.getCoordinates()
     var mask_coord_index = 0
     var mc = mask_coords(mask_coord_index)
@@ -75,6 +75,17 @@ class GeoTools( val SRID: Int = 4326 ) {
       } else {
         bFalse
       }
+  }
+
+  def pointsToMask(grid: geom.MultiPoint, mask_points: geom.MultiPoint): Array[Byte] = {
+    val maskPointCoords: Set[geom.Coordinate] = mask_points.getCoordinates.toSet
+    val orderedPoints = for (gridCoord <- grid.getCoordinates) yield
+      if ( maskPointCoords.contains(gridCoord) ) {
+        bTrue
+      } else {
+        bFalse
+      }
+    orderedPoints.toArray
   }
 
   def getMask( boundary: geom.MultiPolygon, bounds: Array[Float], shape: Array[Int] ): Array[Byte]  = {
