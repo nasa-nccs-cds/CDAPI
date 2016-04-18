@@ -4,10 +4,7 @@ import com.vividsolutions.jts.geom
 import org.geotools.data.shapefile.files.ShpFiles
 import org.geotools.data.shapefile.shp.ShapefileReader
 import java.nio.ByteBuffer
-
 import ucar.ma2
-
-import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class GeoTools( val SRID: Int = 4326 ) {
@@ -30,12 +27,6 @@ class GeoTools( val SRID: Int = 4326 ) {
     new geom.MultiPolygon(polyList.toArray,geometryFactory)
   }
 
-  def mpolysContain( mpolys: List[geom.Geometry], x: Float, y: Float ): Byte = {
-    val point = geometryFactory.createPoint(new geom.Coordinate(x,y))
-    for( mpoly <- mpolys ) if( mpoly.contains(point) ) return bTrue
-    return bFalse
-  }
-
   def getGrid( bounds: Array[Float], shape: Array[Int] ): geom.MultiPoint = {
     val dx = (bounds(1)-bounds(0))/shape(0)
     val dy = (bounds(3)-bounds(2))/shape(1)
@@ -50,13 +41,6 @@ class GeoTools( val SRID: Int = 4326 ) {
       val coords = for( iy <- (0 until shape(1)); y = bounds(2)+iy*dy  ) yield new geom.Coordinate(x,y)
       println( coords.toList.mkString(", ") )
     }
-  }
-
-  def getMaskSlow( boundary: List[geom.Geometry], bounds: Array[Float], shape: Array[Int] ): Array[Byte] = {
-    val dx = (bounds(1)-bounds(0))/shape(0)
-    val dy = (bounds(3)-bounds(2))/shape(1)
-    val mask = for( ix <- (0 until shape(0)); iy <- (0 until shape(1)); x = bounds(0)+ix*dx; y = bounds(2)+iy*dy ) yield mpolysContain( boundary, x, y )
-    mask.toArray
   }
 
   def pointsToMask(grid: geom.MultiPoint, mask_points: geom.MultiPoint): Array[Byte] = {
