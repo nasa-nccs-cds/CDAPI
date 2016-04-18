@@ -67,11 +67,13 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
 
   def slice( slice_index: Int, dimension: Int = 0 ): Nd4jMaskedTensor = new Nd4jMaskedTensor( dataslice(slice_index,dimension), invalid )
 
-  def execAccumulatorOp(op: TensorAccumulatorOp1, dimensions: Int*): Nd4jMaskedTensor = {
+  def execAccumulatorOp(op: TensorAccumulatorOp1, auxDataOpt: Option[Nd4jMaskedTensor], dimensions: Int*): Nd4jMaskedTensor = {
     assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
     val filtered_shape: IndexedSeq[Int] = (0 until shape.length).map(x => if (dimensions.contains(x)) 1 else shape(x))
-//    val filtered_shape: IndexedSeq[Int] = (0 until shape.length).flatMap(x => if (dimensions.contains(x)) None else Some(shape(x)))
-    val slices = Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
+    val slices = auxDataOpt match {
+      case Some(auxData) => Nd4j.concat(0, (0 until filtered_shape.product).map(iS => { Nd4j.create(subset(iS, dimensions: _*).accumulate2( op, auxData.subset( iS, dimensions: _*).tensor )) }): _*)
+      case None =>  Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
+    }
     new Nd4jMaskedTensor( slices.reshape(filtered_shape: _* ), invalid )
   }
 
@@ -116,6 +118,47 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
     op.result
   }
 
+  def computeWeights( weighting_type: String, axisDataMap: Map[ Char, ( Int, Array[Float] ) ] ) : Nd4jMaskedTensor  = {
+    weighting_type match {
+      case "cosine" =>
+        axisDataMap.get('y') match {
+          case Some( ( axisIndex, yAxisData ) ) =>
+            assert( yAxisData.length == shape(axisIndex), "Y Axis data mismatch, %d vs %d".format(yAxisData.length,shape(axisIndex) ) )
+            val cosineWeights = yAxisData.map( Math.cos(_) )
+            val base_shape: Array[Int] = Array( (0 until tensor.rank).map(i=>if(i==axisIndex) shape(axisIndex) else 1): _* )
+       //     cosineWeights.res
+
+          case None => throw new NoSuchElementException( "Missing axis data in weights computation, type: %s".format( weighting_type ))
+        }
+        this
+      case x => throw new NoSuchElementException( "Can't recognize weighting method: %s".format( x ))
+    }
+  }
+
+  def weight( weightsArray: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
+    val result = ( 0 until tensor.length ).map( iC => {
+      val v0 = tensor.getFloat(iC)
+      if( v0 == invalid ) { invalid }
+      else {
+        val w = weightsArray.tensor.getFloat(iC)
+        w*v0
+      }
+    } )
+    new Nd4jMaskedTensor( Nd4j.create( result.toArray, shape ), invalid )
+  }
+
+  def mask( maskArray: ma2.ArrayByte.D1 ): Nd4jMaskedTensor = {
+    val result = ( 0 until tensor.length ).map( iC => {
+      val v0 = tensor.getFloat(iC)
+      if( v0 == invalid ) { invalid }
+      else {
+        val v1 = maskArray.get(iC)
+        if( v1 == 1 ) { v0 } else { invalid }
+      }
+    } )
+    new Nd4jMaskedTensor( Nd4j.create( result.toArray, shape ), invalid )
+  }
+
   def combine( op: TensorCombinerOp, maskedArray: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
     op.init
     val result = ( 0 until tensor.length ).map( iC => {
@@ -124,6 +167,16 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
       op.combine(v0,v1)
     } )
     new Nd4jMaskedTensor( Nd4j.create( result.toArray, shape ), invalid )
+  }
+
+  def accumulate2( op: TensorAccumulatorOp1, auxData: INDArray ): Array[Float] = {
+    op.init
+    ( 0 until tensor.length ).foreach( iC =>  {
+      val v0 = tensor.getFloat(iC)
+      val v1 = auxData.getFloat(iC)
+      if( v0 != invalid ) op.insert(v0,v1)
+    } )
+    Array(op.result)
   }
 
   def combine( op: TensorCombinerOp, value: Float ): Nd4jMaskedTensor = {
@@ -203,7 +256,7 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
     } )
   }
 
-  def mean( dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( new meanOp(invalid), dimensions:_* )
+  def mean( weightsOpt: Option[Nd4jMaskedTensor], dimensions: Int* ): Nd4jMaskedTensor = execAccumulatorOp( new meanOp(invalid), weightsOpt, dimensions:_* )
 
   def bin( dimension: Int, binFactory: BinnedArrayFactory ): Option[Nd4jMaskedTensor] = maskedBin( dimension, binFactory )
 

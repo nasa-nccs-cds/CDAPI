@@ -1,18 +1,19 @@
 package nasa.nccs.cdapi.tensors
 
+import ucar.ma2
+
 abstract class TensorAccumulatorOp1( val invalid: Float = Float.MaxValue ) {
   def init: Unit
-  def insert( value: Float ): Unit
+  def insert( values: Float* ): Unit
   def result: Float
 }
 
 abstract class TensorAccumulatorOpN( val invalid: Float = Float.MaxValue ) {
   def init: Unit
-  def insert( value: Float ): Unit
+  def insert( values: Float* ): Unit
   def result: Array[Float]
   def length: Int
 }
-
 
 abstract class TensorCombinerOp( val invalid: Float = Float.MaxValue ) {
   def init: Unit = {}
@@ -22,9 +23,9 @@ abstract class TensorCombinerOp( val invalid: Float = Float.MaxValue ) {
 
 class meanOp(invalid: Float) extends TensorAccumulatorOp1(invalid) {
   var value_sum  = 0f
-  var value_count = 0
-  def init = { value_sum  = 0f; value_count = 0 }
-  def insert( value: Float ) = if(value != invalid) { value_sum += value; value_count += 1 }
+  var value_count = 0f
+  def init = { value_sum  = 0f; value_count = 0f }
+  def insert( values: Float* ) = if(values(0) != invalid) if ( values.length == 1 ) { value_sum += values(0); value_count += 1 } else { value_sum += values(0)*values(1); value_count += values(1) }
   def result = value_sum / value_count
 }
 

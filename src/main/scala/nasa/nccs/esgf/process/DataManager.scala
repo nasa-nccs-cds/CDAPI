@@ -1,6 +1,8 @@
 package nasa.nccs.esgf.process
 import nasa.nccs.cdapi.cdm._
 import nasa.nccs.cdapi.kernels.AxisIndices
+import ucar.ma2
+
 import collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
@@ -60,6 +62,14 @@ class ServerContext( val dataLoader: DataLoader, private val configuration: Map[
   def getVariable(collection: String, varname: String ): CDSVariable = dataLoader.getVariable( collection, varname )
   def getVariableData( fragSpec: DataFragmentSpec ): PartitionedFragment = dataLoader.getFragment( fragSpec )
 
+  def getAxisData( fragSpec: DataFragmentSpec, axis: Char ): ( Int, ma2.Array ) = {
+    val variable: CDSVariable = dataLoader.getVariable( fragSpec.collection, fragSpec.varname )
+    val coordAxis = variable.dataset.getCoordinateAxis( axis )
+    val axisIndex = variable.ncVariable.findDimensionIndex(coordAxis.getShortName)
+    val range = fragSpec.roi.getRange( axisIndex )
+    ( axisIndex -> coordAxis.read( List(range) ) )
+  }
+
   def getDataset(collection: String, varname: String ): CDSDataset = dataLoader.getDataset( collection, varname )
 
 
@@ -98,7 +108,7 @@ class ServerContext( val dataLoader: DataLoader, private val configuration: Map[
   def loadVariableData( dataContainer: DataContainer, domain_container_opt: Option[DomainContainer] ): (String, OperationInputSpec) = {
     val data_source: DataSource = dataContainer.getSource
     val t0 = System.nanoTime
-    val variable = dataLoader.getVariable(data_source.collection, data_source.name)
+    val variable: CDSVariable = dataLoader.getVariable(data_source.collection, data_source.name)
     val t1 = System.nanoTime
     val axisSpecs: AxisIndices = variable.getAxisIndices( dataContainer.getOpSpecs )
     val t2 = System.nanoTime
