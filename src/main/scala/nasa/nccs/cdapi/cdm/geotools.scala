@@ -59,38 +59,18 @@ class GeoTools( val SRID: Int = 4326 ) {
     mask.toArray
   }
 
-  def orderedPointsToMask(grid: geom.MultiPoint, mask_points: geom.MultiPoint): Array[Byte] = {
-    val mask_coords = mask_points.getCoordinates()
-    var mask_coord_index = 0
-    var mc = mask_coords(mask_coord_index)
-    for (gc <- grid.getCoordinates()) yield
-      if (gc.equals(mc) && (mask_coord_index >= 0)) {
-        mask_coord_index += 1
-        if (mask_coord_index >= mask_coords.length) {
-          mask_coord_index = -1
-        } else {
-          mc = mask_coords(mask_coord_index)
-        }
-        bTrue
-      } else {
-        bFalse
-      }
-  }
-
   def pointsToMask(grid: geom.MultiPoint, mask_points: geom.MultiPoint): Array[Byte] = {
     val maskPointCoords: Set[geom.Coordinate] = mask_points.getCoordinates.toSet
     val orderedPoints = for (gridCoord <- grid.getCoordinates) yield
-      if ( maskPointCoords.contains(gridCoord) ) {
-        bTrue
-      } else {
-        bFalse
-      }
+      if ( maskPointCoords.contains(gridCoord) ) { bTrue } else { bFalse }
     orderedPoints.toArray
   }
 
-  def getMask( boundary: geom.MultiPolygon, bounds: Array[Float], shape: Array[Int] ): Array[Byte]  = {
-    val grid: geom.MultiPoint = getGrid( bounds, shape )
-    val mask_buffer:  Array[Byte]  = boundary.intersection(grid) match {
+  def getMask( mask_polys: geom.MultiPolygon, bounds: Array[Float], shape: Array[Int] ): Array[Byte]  = getMask( mask_polys, getGrid(bounds, shape) )
+
+  def getMask( mask_polys: geom.MultiPolygon, grid: geom.MultiPoint ): Array[Byte]  = {
+    val intersectedPoints = mask_polys.intersection(grid)
+    val mask_buffer:  Array[Byte]  =  intersectedPoints match {
       case mask_mpt: geom.MultiPoint => pointsToMask ( grid, mask_mpt )
       case x => throw new Exception( "Unexpected result type from grid intersection: " + x.getClass.getCanonicalName )
     }
