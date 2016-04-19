@@ -136,10 +136,9 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
             val base_shape: Array[Int] = Array( (0 until tensor.rank).map(i => if(i==axisIndex) shape(axisIndex) else 1 ): _* )
             val weightsArray =  Nd4j.create( cosineWeights, base_shape )
 //            val weightsArray = ma2.Array.factory(cosineWeights).reshapeNoCopy( base_shape )
-            weightsArray.broadcast( shape: _* )
+            new Nd4jMaskedTensor( weightsArray.broadcast( shape: _* ), invalid )
           case None => throw new NoSuchElementException( "Missing axis data in weights computation, type: %s".format( weighting_type ))
         }
-        this
       case x => throw new NoSuchElementException( "Can't recognize weighting method: %s".format( x ))
     }
   }
