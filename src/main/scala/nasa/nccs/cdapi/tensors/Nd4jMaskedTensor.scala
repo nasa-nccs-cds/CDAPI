@@ -118,15 +118,21 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
     op.result
   }
 
+  def getDoubleArray( tensor: ma2.Array ): Array[Double] = ma2.DataType.getType(tensor.getElementType) match {
+    case ma2.DataType.FLOAT => tensor.getStorage.asInstanceOf[Array[Float]].map(_.toDouble)
+    case ma2.DataType.DOUBLE => tensor.getStorage.asInstanceOf[Array[Double]]
+    case ma2.DataType.INT =>    tensor.getStorage.asInstanceOf[Array[Int]].map(_.toDouble)
+  }
+
   def computeWeights( weighting_type: String, axisDataMap: Map[ Char, ( Int, ma2.Array ) ] ) : Nd4jMaskedTensor  = {
     weighting_type match {
       case "cosine" =>
         axisDataMap.get('y') match {
           case Some( ( axisIndex, yAxisData ) ) =>
             val axis_length = yAxisData.getSize
-            val axis_data = yAxisData.getStorage().asInstanceOf[ Array[Float] ]
+            val axis_data = getDoubleArray( yAxisData )
             assert( axis_length == shape(axisIndex), "Y Axis data mismatch, %d vs %d".format(axis_length,shape(axisIndex) ) )
-            val cosineWeights = axis_data.map( x => Math.cos( Math.toRadians(x) ) )
+            val cosineWeights: Array[Float] = axis_data.map( x => Math.cos( Math.toRadians(x) ).toFloat )
             val base_shape: Array[Int] = Array( (0 until tensor.rank).map(i => if(i==axisIndex) shape(axisIndex) else 1 ): _* )
             val weightsArray =  Nd4j.create( cosineWeights, base_shape )
 //            val weightsArray = ma2.Array.factory(cosineWeights).reshapeNoCopy( base_shape )
