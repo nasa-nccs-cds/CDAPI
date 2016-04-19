@@ -118,16 +118,19 @@ class Nd4jMaskedTensor( val tensor: INDArray, val invalid: Float ) extends Seria
     op.result
   }
 
-  def computeWeights( weighting_type: String, axisDataMap: Map[ Char, ( Int, Array[Float] ) ] ) : Nd4jMaskedTensor  = {
+  def computeWeights( weighting_type: String, axisDataMap: Map[ Char, ( Int, ma2.Array ) ] ) : Nd4jMaskedTensor  = {
     weighting_type match {
       case "cosine" =>
         axisDataMap.get('y') match {
           case Some( ( axisIndex, yAxisData ) ) =>
-            assert( yAxisData.length == shape(axisIndex), "Y Axis data mismatch, %d vs %d".format(yAxisData.length,shape(axisIndex) ) )
-            val cosineWeights = yAxisData.map( Math.cos(_) )
-            val base_shape: Array[Int] = Array( (0 until tensor.rank).map(i=>if(i==axisIndex) shape(axisIndex) else 1): _* )
-       //     cosineWeights.res
-
+            val axis_length = yAxisData.getSize
+            val axis_data = yAxisData.getStorage().asInstanceOf[ Array[Float] ]
+            assert( axis_length == shape(axisIndex), "Y Axis data mismatch, %d vs %d".format(axis_length,shape(axisIndex) ) )
+            val cosineWeights = axis_data.map( x => Math.cos( Math.toRadians(x) ) )
+            val base_shape: Array[Int] = Array( (0 until tensor.rank).map(i => if(i==axisIndex) shape(axisIndex) else 1 ): _* )
+            val weightsArray =  Nd4j.create( cosineWeights, base_shape )
+//            val weightsArray = ma2.Array.factory(cosineWeights).reshapeNoCopy( base_shape )
+            weightsArray.broadcast( shape: _* )
           case None => throw new NoSuchElementException( "Missing axis data in weights computation, type: %s".format( weighting_type ))
         }
         this
