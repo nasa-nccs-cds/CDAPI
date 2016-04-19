@@ -85,8 +85,8 @@ object maskPointsTest extends App {
 }
 
 object maskGridTest extends App {
- // val oceanShapeUrl=getClass.getResource("/shapes/110m/ocean/ne_110m_ocean.shp")
-  val oceanShapeUrl=getClass.getResource("/shapes/ocean50m/ne_50m_ocean.shp")
+//  val oceanShapeUrl=getClass.getResource("/shapes/ocean50m/ne_50m_ocean.shp")
+  val oceanShapeUrl=getClass.getResource("/shapes/ocean110m/ne_110m_ocean.shp")
   val geotools = new GeoTools()
   val shape = Array(360,180)
   val t0 = System.nanoTime
