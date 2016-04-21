@@ -1,33 +1,30 @@
 package nasa.nccs.cdapi.tensors
+import scala.collection.mutable.ListBuffer
 import ucar.ma2
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 // Based on ucar.ma2.CDIndex, portions of which were developed by the Unidata Program at the University Corporation for Atmospheric Research.
 
 object CDIndex {
-  val scalarCDIndexImmutable: CDIndex0D = new CDIndex0D()
 
-  def factory(shape: Array[Int]): CDIndex = {
-    val rank: Int = shape.length
-    rank match {
-      case 0 =>
-        return new CDIndex0D;
-      case 1 =>
-        return new CDIndex1D(shape)
-      case 2 =>
-        return new CDIndex2D(shape)
-      case 3 =>
-        return new CDIndex3D(shape)
-      case 4 =>
-        return new CDIndex4D(shape)
-      case 5 =>
-        return new CDIndex5D(shape)
-      case _ =>
-        return new CDIndex(shape)
-    }
+  def factory( index: CDIndex ): CDIndex = factory( index.shape, index.stride, index.offset )
+
+  def factory( shape: Array[Int], stride: Array[Int]=Array.emptyIntArray, offset: Int = 0 ): CDIndex = shape.length match {
+    case 1 =>
+      return new CDIndex1D(shape,stride,offset)
+    case 2 =>
+      return new CDIndex2D(shape,stride,offset)
+    case 3 =>
+      return new CDIndex3D(shape,stride,offset)
+    case 4 =>
+      return new CDIndex4D(shape,stride,offset)
+    case 5 =>
+      return new CDIndex5D(shape,stride,offset)
+    case _ =>
+      return new CDIndex(shape,stride,offset)
   }
 
-  def computeSize(shape: Array[Int]): Long = {
+  def computeSize(shape: Array[Int]): Long = { // shape.filter( i => i >= 0 )
     var product: Long = 1
     for (aShape <- shape; if (aShape >= 0)) product *= aShape
     return product
@@ -40,73 +37,40 @@ object CDIndex {
   }
 }
 
-trait TIndexIterator {
-  def hasNext: Boolean
-  def getFloatNext: Float
-  def setFloatNext(value: Float)
-  def getFloatCurrent: Float
-  def setFloatCurrent(value: Float)
-  def next: Float
-  def getCurrentCounter: Array[Int]
+
+class CDRawDataFloatIterator( protected val _maa: CDArrayFloat  ) extends collection.Iterator[Float] {
+  private var currElement: Int = 0
+  private val size = _maa.getSize
+
+  def hasNext: Boolean = ( currElement < size - 1 )
+  def next(): Float = {
+    currElement += 1
+    _maa.getFloat( currElement )
+  }
+  def getIndex() =  currElement
 }
 
-private class IteratorImpl extends TIndexIterator {
-private var count: Int = 0
-private var currElement: Int = 0
-private var counter: CDIndex = null
-private var maa: CDArray = null
+class CDIterator( index: CDIndex  ) extends collection.Iterator[CDIndex] {
+  protected val counter: CDIndex = CDIndex.factory( index )
+  private var count: Int = 0
+  private var currElement: Int = 0
 
-class IteratorImpl( _maa: CDArray  ) {
-  val maa = _maa;
-  val counter = new CDIndex(maa.getIndex).initIteration
-
-def hasNext: Boolean = {
-    return count < counter.size
-  }
-
-
-  def getCurrentCounter: Array[Int] = {
-    return counter.getCurrentCounter
-  }
-
-  def next: Nothing = {
+  def hasNext: Boolean = ( count < counter.size )
+  def next(): CDIndex = {
     count += 1
     currElement = counter.incr
-    return maa.getObject(currElement)
+    counter
   }
-
-  def getFloatCurrent: Float = {
-    return maa.getFloat(currElement)
-  }
-
-  def getFloatNext: Float = {
-    count += 1
-    currElement = counter.incr
-    return maa.getFloat(currElement)
-  }
-
-  def setFloatCurrent(value: Float) {
-    maa.setFloat(currElement, value)
-  }
-
-  def setFloatNext(value: Float) {
-    count += 1
-    currElement = counter.incr
-    maa.setFloat(currElement, value)
-  }
-
+  def getIndices: Array[Int] = counter.getCurrentCounter
+  def getIndex() =  currElement
 }
 
-class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 0 ) {
+class CDIndex( val shape: Array[Int], _stride: Array[Int]=Array.emptyIntArray, val offset: Int = 0 ) {
   val rank: Int = shape.length
   val size: Long = CDIndex.computeSize(shape)
+  val stride = if( _stride.isEmpty ) CDIndex.computeStrides(shape) else _stride
   val hasvlen: Boolean = (shape.length > 0 && shape(shape.length - 1) < 0)
-  private var fastIterator: Boolean = ( offset == 0 )
   protected var current: Array[Int] = new Array[Int](rank)
-
-  def this( shape: Array[Int] ) = {
-    this( shape, CDIndex.computeStrides(shape) )
-  }
 
   def this( index: CDIndex ) = {
     this( index.shape, index.stride, index.offset )
@@ -114,21 +78,20 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
 
   protected def precalc() {}
 
-  def initIteration() {
-    if (rank > 0) {
-      current(rank - 1) = -1    // avoid "if first" on every incr.
-      precalc()
-    }
+  def initIteration(): CDIndex = {
+    assert (rank > 0, "Can't itereate a 0-rank array")
+    current(rank - 1) = -1
+    precalc()
+    this
   }
 
   def flip(index: Int): CDIndex = {
-    if ((index < 0) || (index >= rank)) throw new Nothing
+    if ((index < 0) || (index >= rank)) throw new Exception()
     val i: CDIndex = this.clone.asInstanceOf[CDIndex]
     if (shape(index) >= 0) {
       i.offset += stride(index) * (shape(index) - 1)
       i.stride(index) = -stride(index)
     }
-    i.fastIterator = false
     i.precalc
     return i
   }
@@ -145,23 +108,22 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
         reducedRank -= 1; reducedRank + 1
       })
     }
-    val newindex: CDIndex = CDIndex.factory(rank)
-    newindex.offset = offset
+
+    var _offset: Int = offset
+    val _shape: Array[Int] = Array.fill[Int](rank)(0)
+    val _stride: Array[Int] = Array.fill[Int](rank)(0)
     for( ii <-(0 until rank); r = ranges(ii) ) {
       if (r == null) {
-        newindex.shape(ii) = shape(ii)
-        newindex.stride(ii) = stride(ii)
+        _shape(ii) = shape(ii)
+        _stride(ii) = stride(ii)
       }
       else {
-        newindex.shape(ii) = r.length
-        newindex.stride(ii) = stride(ii) * r.stride
-        newindex.offset += stride(ii) * r.first
+        _shape(ii) = r.length
+        _stride(ii) = stride(ii) * r.stride
+        _offset += stride(ii) * r.first
       }
     }
-    newindex.size = CDIndex.computeSize(newindex.shape)
-    newindex.fastIterator = fastIterator && (newindex.size == size)
-    newindex.precalc
-    return newindex
+    CDIndex.factory( _shape, _stride, _offset )
   }
 
   def reduce: CDIndex = {
@@ -176,46 +138,37 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
   def reduce(dim: Int): CDIndex = {
     assert((dim >= 0) && (dim < rank), "illegal reduce dim " + dim )
     assert( (shape(dim) == 1), "illegal reduce dim " + dim + " : length != 1" )
-    val newindex: CDIndex = CDIndex.factory(rank - 1)
-    newindex.offset = offset
-    var count: Int = 0
+    val _shape = ListBuffer[Int]()
+    val _stride = ListBuffer[Int]()
     for( ii <-(0 until rank); if (ii != dim) ) {
-        newindex.shape(count) = shape(ii)
-        newindex.stride(count) = stride(ii)
-        count += 1
+        _shape.append( shape(ii) )
+        _stride.append( stride(ii) )
     }
-    newindex.size = CDIndex.computeSize(newindex.shape)
-    newindex.fastIterator = fastIterator
-    newindex.precalc
-    return newindex
+    CDIndex.factory( _shape.toArray, _stride.toArray )
   }
 
   def transpose(index1: Int, index2: Int): CDIndex = {
     assert((index1 >= 0) && (index1 < rank), "illegal index in transpose " + index1 )
     assert((index2 >= 0) && (index2 < rank), "illegal index in transpose " + index1 )
-    val newCDIndex: CDIndex = this.clone.asInstanceOf[CDIndex]
-    newCDIndex.stride(index1) = stride(index2)
-    newCDIndex.stride(index2) = stride(index1)
-    newCDIndex.shape(index1) = shape(index2)
-    newCDIndex.shape(index2) = shape(index1)
-    newCDIndex.fastIterator = false
-    newCDIndex.precalc
-    return newCDIndex
+    val _shape = shape.clone()
+    val _stride = stride.clone()
+    _stride(index1) = stride(index2)
+    _stride(index2) = stride(index1)
+    _shape(index1) = shape(index2)
+    _shape(index2) = shape(index1)
+    CDIndex.factory( _shape, _stride )
   }
 
   def permute(dims: Array[Int]): CDIndex = {
     assert( (dims.length == shape.length), "illegal shape in permute " + dims )
     for (dim <- dims) if ((dim < 0) || (dim >= rank)) throw new Exception( "illegal shape in permute " + dims )
-    var isPermuted: Boolean = false
-    val newCDIndex: CDIndex = this.clone.asInstanceOf[CDIndex]
+    val _shape = ListBuffer[Int]()
+    val _stride = ListBuffer[Int]()
     for( i <-(0 until dims.length) ) {
-      newCDIndex.stride(i) = stride(dims(i))
-      newCDIndex.shape(i) = shape(dims(i))
-      if (i != dims(i)) isPermuted = true
+      _stride.append( stride(dims(i) ) )
+      _shape.append( shape(dims(i)) )
     }
-    newCDIndex.fastIterator = fastIterator && !isPermuted
-    newCDIndex.precalc
-    return newCDIndex
+    CDIndex.factory( _shape.toArray, _stride.toArray )
   }
 
   def getRank: Int = {
@@ -228,23 +181,6 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
     return shape(index)
   }
 
-  private[ma2] def getCDIndexIterator(maa: Nothing): Nothing = {
-    if (fastIterator) return new Nothing(size, maa)
-    else return new CDIndex#IteratorImpl(maa)
-  }
-
-  private[ma2] def getSlowCDIndexIterator(maa: Nothing): Nothing = {
-    return new CDIndex#IteratorImpl(maa)
-  }
-
-  private[ma2] def getCDIndexIteratorFast(maa: Nothing): Nothing = {
-    return new Nothing(size, maa)
-  }
-
-  private[ma2] def isFastIterator: Boolean = {
-    return fastIterator
-  }
-
   def getSize: Long = {
     return size
   }
@@ -252,124 +188,99 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
   def currentElement: Int = {
     var value: Int = offset
     var ii: Int = 0
-    while (ii < rank) {
-      {
-        if (shape(ii) < 0) break //todo: break is not supported
-        value += current(ii) * stride(ii)
-      }
-      ({
-        ii += 1; ii - 1
-      })
+    for( ii <-(0 until rank); if (shape(ii) >= 0) ) {
+      value += current(ii) * stride(ii)
     }
-    return value
+    value
   }
 
-  def getCurrentCounter: Array[Int] = {
-    return current.clone
-  }
+  def getCurrentCounter: Array[Int] = current.clone
 
-  def setCurrentCounter(currElement: Int) {
+  def setCurrentCounter( _currElement: Int ) {
+    var currElement = _currElement
     currElement -= offset
-    var ii: Int = 0
-    while (ii < rank) {
-      {
-        if (shape(ii) < 0) {
-          current(ii) = -1
-          break //todo: break is not supported
-        }
-        current(ii) = currElement / stride(ii)
-        currElement -= current(ii) * stride(ii)
-      }
-      ({
-        ii += 1; ii - 1
-      })
+    for( ii <-(0 until rank) ) if (shape(ii) < 0) { current(ii) = -1 } else {
+      current(ii) = currElement / stride(ii)
+      currElement -= current(ii) * stride(ii)
     }
     set(current)
   }
 
   def incr: Int = {
-    var digit: Int = rank - 1
-    while (digit >= 0) {
-      {
-        if (shape(digit) < 0) {
-          current(digit) = -1
-          continue //todo: continue is not supported
-        }
-        current(digit) += 1
-        if (current(digit) < shape(digit)) break //todo: break is not supported
-        current(digit) = 0
-        digit -= 1
-      }
+    for( digit <-(rank - 1 to 0 by -1) ) if (shape(digit) < 0) { current(digit) = -1 } else {
+      current(digit) += 1
+      if (current(digit) < shape(digit)) return currentElement
+      current(digit) = 0
     }
-    return currentElement
+    currentElement
   }
 
   def set(index: Array[Int]): CDIndex = {
-    if (index.length != rank) throw new Nothing
-    if (rank == 0) return this
-    val prefixrank: Int = (if (hasvlen) rank
-    else rank - 1)
-    System.arraycopy(index, 0, current, 0, prefixrank)
-    if (hasvlen) current(prefixrank) = -1
-    return this
+    assert( (index.length == rank), "Array has wrong rank in Index.set" )
+    if (rank > 0) {
+      val prefixrank: Int = (if (hasvlen) rank else rank - 1)
+      Array.copy(index, 0, current, 0, prefixrank)
+      if (hasvlen) current(prefixrank) = -1
+    }
+    this
   }
 
   def setDim(dim: Int, value: Int) {
-    if (value < 0 || value >= shape(dim)) throw new Nothing
+    assert (value >= 0 && value < shape(dim), "Illegal argument in Index.setDim")
     if (shape(dim) >= 0) current(dim) = value
   }
 
   def set0(v: Int): CDIndex = {
     setDim(0, v)
-    return this
+    this
   }
 
   def set1(v: Int): CDIndex = {
     setDim(1, v)
-    return this
+    this
   }
 
   def set2(v: Int): CDIndex = {
     setDim(2, v)
-    return this
+    this
   }
 
   def set3(v: Int): CDIndex = {
     setDim(3, v)
-    return this
+    this
   }
 
   def set4(v: Int): CDIndex = {
     setDim(4, v)
-    return this
+    this
   }
 
   def set5(v: Int): CDIndex = {
     setDim(5, v)
-    return this
+    this
   }
 
   def set6(v: Int): CDIndex = {
     setDim(6, v)
-    return this
+    this
   }
 
   def set(v0: Int): CDIndex = {
     setDim(0, v0)
-    return this
+    this
   }
 
   def set(v0: Int, v1: Int): CDIndex = {
     setDim(0, v0)
     setDim(1, v1)
-    return this
+    this
   }
 
   def set(v0: Int, v1: Int, v2: Int): CDIndex = {
     setDim(0, v0)
     setDim(1, v1)
     setDim(2, v2)
-    return this
+    this
   }
 
   def set(v0: Int, v1: Int, v2: Int, v3: Int): CDIndex = {
@@ -377,7 +288,7 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
     setDim(1, v1)
     setDim(2, v2)
     setDim(3, v3)
-    return this
+    this
   }
 
   def set(v0: Int, v1: Int, v2: Int, v3: Int, v4: Int): CDIndex = {
@@ -386,7 +297,7 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
     setDim(2, v2)
     setDim(3, v3)
     setDim(4, v4)
-    return this
+    this
   }
 
   def set(v0: Int, v1: Int, v2: Int, v3: Int, v4: Int, v5: Int): CDIndex = {
@@ -396,7 +307,7 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
     setDim(3, v3)
     setDim(4, v4)
     setDim(5, v5)
-    return this
+    this
   }
 
   def set(v0: Int, v1: Int, v2: Int, v3: Int, v4: Int, v5: Int, v6: Int): CDIndex = {
@@ -407,143 +318,90 @@ class CDIndex( val shape: Array[Int], val stride: Array[Int], val offset: Int = 
     setDim(4, v4)
     setDim(5, v5)
     setDim(6, v6)
-    return this
+    this
   }
 
 
 }
 
-class CDIndex0D extends CDIndex {
-  def this {
-    this()
-    super (0)
-    this.size = 1
-    this.offset = 0
-  }
 
-  def this(shape: Array[Int]) {
-    this()
-    super (shape)
-  }
-
-  def currentElement: Int = {
-    return offset
-  }
-
-  def incr: Int = {
-    return offset
-  }
-
-  def clone: Nothing = {
-    return super.clone
-  }
-
-  def set: Nothing = {
-    return this
-  }
-}
-
-public
-
-class CDIndex1D extends CDIndex {
+class CDIndex1D(shape: Array[Int], stride: Array[Int], offset: Int = 0) extends CDIndex(shape,stride,offset) {
   private var curr0: Int = 0
   private var stride0: Int = 0
   private var shape0: Int = 0
 
-  def this {
-    this()
-    super (1)
-  }
 
   def this(shape: Array[Int]) {
-    this()
-    super (shape)
+    this(shape)
     precalc
   }
 
-  def toString: Nothing = {
-    return Integer.toString(curr0)
-  }
 
-  protected def precalc {
+  override def precalc {
     shape0 = shape(0)
     stride0 = stride(0)
     curr0 = current(0)
   }
 
-  def getCurrentCounter: Array[Int] = {
+  override def getCurrentCounter: Array[Int] = {
     current(0) = curr0
-    return current.clone
+    current.clone
   }
 
-  def currentElement: Int = {
-    return offset + curr0 * stride0
+  override def currentElement: Int = {
+    offset + curr0 * stride0
   }
 
-  def incr: Int = {
+  override def incr: Int = {
     if (({
       curr0 += 1; curr0
     }) >= shape0) curr0 = 0
-    return offset + curr0 * stride0
+    offset + curr0 * stride0
   }
 
-  def setDim(dim: Int, value: Int) {
-    if (value < 0 || value >= shape(dim)) throw new Nothing
+  override def setDim(dim: Int, value: Int) {
+    if (value < 0 || value >= shape(dim)) throw new Exception()
     curr0 = value
   }
 
-  def set0(v: Int): Nothing = {
-    if (v < 0 || v >= shape0) throw new Nothing
+  override def set0(v: Int): CDIndex = {
+    if (v < 0 || v >= shape0) throw new Exception()
     curr0 = v
-    return this
+    this
   }
 
-  def set(v0: Int): Nothing = {
+  override def set(v0: Int): CDIndex = {
     set0(v0)
-    return this
+    this
   }
 
-  def set(index: Array[Int]): Nothing = {
-    if (index.length != rank) throw new Nothing
+  override def set(index: Array[Int]): CDIndex = {
+    if (index.length != rank) throw new Exception()
     set0(index(0))
-    return this
+    this
   }
-
-  def clone: Nothing = {
-    return super.clone
-  }
-
-  private[ma2] def setDirect(v0: Int): Int = {
-    if (v0 < 0 || v0 >= shape0) throw new Nothing
-    return offset + v0 * stride0
+  
+  private def setDirect(v0: Int): Int = {
+    if (v0 < 0 || v0 >= shape0) throw new Exception()
+    offset + v0 * stride0
   }
 }
 
-public
-
-class CDIndex2D extends CDIndex {
+class CDIndex2D(shape: Array[Int], stride: Array[Int], offset: Int = 0) extends CDIndex(shape,stride,offset) {
   private var curr0: Int = 0
-  ,
   private var curr1: Int = 0
   private var stride0: Int = 0
-  ,
   private var stride1: Int = 0
   private var shape0: Int = 0
-  ,
   private var shape1: Int = 0
 
-  def this {
-    this()
-    super (2)
-  }
 
   def this(shape: Array[Int]) {
-    this()
-    super (shape)
+    this (shape)
     precalc
   }
 
-  protected def precalc {
+  override def precalc {
     shape0 = shape(0)
     shape1 = shape(1)
     stride0 = stride(0)
@@ -552,21 +410,21 @@ class CDIndex2D extends CDIndex {
     curr1 = current(1)
   }
 
-  def getCurrentCounter: Array[Int] = {
+  override def getCurrentCounter: Array[Int] = {
     current(0) = curr0
     current(1) = curr1
-    return current.clone
+    current.clone
   }
 
-  def toString: Nothing = {
-    return curr0 + "," + curr1
+  override def toString: String = {
+    curr0 + "," + curr1
   }
 
-  def currentElement: Int = {
-    return offset + curr0 * stride0 + curr1 * stride1
+  override def currentElement: Int = {
+    offset + curr0 * stride0 + curr1 * stride1
   }
 
-  def incr: Int = {
+  override def incr: Int = {
     if (({
       curr1 += 1; curr1
     }) >= shape1) {
@@ -577,82 +435,72 @@ class CDIndex2D extends CDIndex {
         curr0 = 0
       }
     }
-    return offset + curr0 * stride0 + curr1 * stride1
+    offset + curr0 * stride0 + curr1 * stride1
   }
 
-  def setDim(dim: Int, value: Int) {
-    if (value < 0 || value >= shape(dim)) throw new Nothing
+  override def setDim(dim: Int, value: Int) {
+    if (value < 0 || value >= shape(dim)) throw new Exception()
     if (dim == 1) curr1 = value
     else curr0 = value
   }
 
-  def set(index: Array[Int]): Nothing = {
-    if (index.length != rank) throw new Nothing
+  override def set(index: Array[Int]): CDIndex = {
+    if (index.length != rank) throw new Exception()
     set0(index(0))
     set1(index(1))
-    return this
+    this
   }
 
-  def set0(v: Int): Nothing = {
-    if (v < 0 || v >= shape0) throw new Nothing
+  override def set0(v: Int): CDIndex = {
+    if (v < 0 || v >= shape0) throw new Exception()
     curr0 = v
-    return this
+    this
   }
 
-  def set1(v: Int): Nothing = {
-    if (v < 0 || v >= shape1) throw new Nothing("index=" + v + " shape=" + shape1)
+  override def set1(v: Int): CDIndex = {
+    if (v < 0 || v >= shape1) throw new Exception()("index=" + v + " shape=" + shape1)
     curr1 = v
-    return this
+    this
   }
 
-  def set(v0: Int, v1: Int): Nothing = {
+  override def set(v0: Int, v1: Int): CDIndex = {
     set0(v0)
     set1(v1)
-    return this
+    this
   }
 
-  def clone: Nothing = {
-    return super.clone
-  }
 
   private[ma2] def setDirect(v0: Int, v1: Int): Int = {
-    if (v0 < 0 || v0 >= shape0) throw new Nothing
-    if (v1 < 0 || v1 >= shape1) throw new Nothing
-    return offset + v0 * stride0 + v1 * stride1
+    if (v0 < 0 || v0 >= shape0) throw new Exception()
+    if (v1 < 0 || v1 >= shape1) throw new Exception()
+    offset + v0 * stride0 + v1 * stride1
   }
 }
 
-public
 
-class CDIndex3D extends CDIndex {
+class CDIndex3D(shape: Array[Int], stride: Array[Int], offset: Int = 0) extends CDIndex(shape,stride,offset) {
   private var curr0: Int = 0
-  ,
   private var curr1: Int = 0
-  ,
+
   private var curr2: Int = 0
   private var stride0: Int = 0
-  ,
+
   private var stride1: Int = 0
-  ,
+
   private var stride2: Int = 0
   private var shape0: Int = 0
-  ,
+
   private var shape1: Int = 0
-  ,
+
   private var shape2: Int = 0
 
-  def this {
-    this()
-    super (3)
-  }
 
   def this(shape: Array[Int]) {
-    this()
-    super (shape)
+    this (shape)
     precalc
   }
 
-  protected def precalc {
+  override  def precalc {
     shape0 = shape(0)
     shape1 = shape(1)
     shape2 = shape(2)
@@ -664,22 +512,22 @@ class CDIndex3D extends CDIndex {
     curr2 = current(2)
   }
 
-  def getCurrentCounter: Array[Int] = {
+  override def getCurrentCounter: Array[Int] = {
     current(0) = curr0
     current(1) = curr1
     current(2) = curr2
-    return current.clone
+    current.clone
   }
 
-  def toString: Nothing = {
-    return curr0 + "," + curr1 + "," + curr2
+  override def toString: String = {
+    curr0 + "," + curr1 + "," + curr2
   }
 
-  def currentElement: Int = {
-    return offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2
+  override def currentElement: Int = {
+    offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2
   }
 
-  def incr: Int = {
+  override def incr: Int = {
     if (({
       curr2 += 1; curr2
     }) >= shape2) {
@@ -695,98 +543,87 @@ class CDIndex3D extends CDIndex {
         }
       }
     }
-    return offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2
+    offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2
   }
 
-  def setDim(dim: Int, value: Int) {
-    if (value < 0 || value >= shape(dim)) throw new Nothing
+  override def setDim(dim: Int, value: Int) {
+    if (value < 0 || value >= shape(dim)) throw new Exception()
     if (dim == 2) curr2 = value
     else if (dim == 1) curr1 = value
     else curr0 = value
   }
 
-  def set0(v: Int): Nothing = {
-    if (v < 0 || v >= shape0) throw new Nothing
+  override def set0(v: Int): CDIndex = {
+    if (v < 0 || v >= shape0) throw new Exception()
     curr0 = v
-    return this
+    this
   }
 
-  def set1(v: Int): Nothing = {
-    if (v < 0 || v >= shape1) throw new Nothing
+  override def set1(v: Int): CDIndex = {
+    if (v < 0 || v >= shape1) throw new Exception()
     curr1 = v
-    return this
+    this
   }
 
-  def set2(v: Int): Nothing = {
-    if (v < 0 || v >= shape2) throw new Nothing
+  override def set2(v: Int): CDIndex = {
+    if (v < 0 || v >= shape2) throw new Exception()
     curr2 = v
-    return this
+    this
   }
 
-  def set(v0: Int, v1: Int, v2: Int): Nothing = {
+  override def set(v0: Int, v1: Int, v2: Int): CDIndex = {
     set0(v0)
     set1(v1)
     set2(v2)
-    return this
+    this
   }
 
-  def set(index: Array[Int]): Nothing = {
-    if (index.length != rank) throw new Nothing
+  override def set(index: Array[Int]): CDIndex = {
+    if (index.length != rank) throw new Exception()
     set0(index(0))
     set1(index(1))
     set2(index(2))
-    return this
-  }
-
-  def clone: Nothing = {
-    return super.clone
+    this
   }
 
   private[ma2] def setDirect(v0: Int, v1: Int, v2: Int): Int = {
-    if (v0 < 0 || v0 >= shape0) throw new Nothing
-    if (v1 < 0 || v1 >= shape1) throw new Nothing
-    if (v2 < 0 || v2 >= shape2) throw new Nothing
-    return offset + v0 * stride0 + v1 * stride1 + v2 * stride2
+    if (v0 < 0 || v0 >= shape0) throw new Exception()
+    if (v1 < 0 || v1 >= shape1) throw new Exception()
+    if (v2 < 0 || v2 >= shape2) throw new Exception()
+    offset + v0 * stride0 + v1 * stride1 + v2 * stride2
   }
 }
 
-public
-
-class CDIndex4D extends CDIndex {
+class CDIndex4D(shape: Array[Int], stride: Array[Int], offset: Int = 0) extends CDIndex(shape,stride,offset) {
   private var curr0: Int = 0
-  ,
+
   private var curr1: Int = 0
-  ,
+
   private var curr2: Int = 0
-  ,
+
   private var curr3: Int = 0
   private var stride0: Int = 0
-  ,
+
   private var stride1: Int = 0
-  ,
+
   private var stride2: Int = 0
-  ,
+
   private var stride3: Int = 0
   private var shape0: Int = 0
-  ,
+
   private var shape1: Int = 0
-  ,
+
   private var shape2: Int = 0
-  ,
+
   private var shape3: Int = 0
 
-  def this {
-    this()
-    super (4)
-  }
 
   def this(shape: Array[Int]) {
-    this()
-    super (shape)
+    this (shape)
     precalc
   }
 
-  protected def precalc {
+  override def precalc {
     shape0 = shape(0)
     shape1 = shape(1)
     shape2 = shape(2)
@@ -801,23 +638,23 @@ class CDIndex4D extends CDIndex {
     curr3 = current(3)
   }
 
-  def toString: Nothing = {
-    return curr0 + "," + curr1 + "," + curr2 + "," + curr3
+  override def toString: String = {
+    curr0 + "," + curr1 + "," + curr2 + "," + curr3
   }
 
-  def getCurrentCounter: Array[Int] = {
+  override def getCurrentCounter: Array[Int] = {
     current(0) = curr0
     current(1) = curr1
     current(2) = curr2
     current(3) = curr3
-    return current.clone
+    current.clone
   }
 
-  def currentElement: Int = {
-    return offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3
+  override def currentElement: Int = {
+    offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3
   }
 
-  def incr: Int = {
+  override def incr: Int = {
     if (({
       curr3 += 1;
       curr3
@@ -842,112 +679,100 @@ class CDIndex4D extends CDIndex {
         }
       }
     }
-    return offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + curr3 * stride3
+    offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + curr3 * stride3
   }
 
-  def setDim(dim: Int, value: Int) {
-    if (value < 0 || value >= shape(dim)) throw new Nothing
+  override def setDim(dim: Int, value: Int) {
+    if (value < 0 || value >= shape(dim)) throw new Exception()
     if (dim == 3) curr3 = value
     else if (dim == 2) curr2 = value
     else if (dim == 1) curr1 = value
     else curr0 = value
   }
 
-  def set0(v: Int): Nothing = {
-    if (v < 0 || v >= shape0) throw new Nothing
+  override def set0(v: Int): CDIndex = {
+    if (v < 0 || v >= shape0) throw new Exception()
     curr0 = v
-    return this
+    this
   }
 
-  def set1(v: Int): Nothing = {
-    if (v < 0 || v >= shape1) throw new Nothing
+  override def set1(v: Int): CDIndex = {
+    if (v < 0 || v >= shape1) throw new Exception()
     curr1 = v
-    return this
+    this
   }
 
-  def set2(v: Int): Nothing = {
-    if (v < 0 || v >= shape2) throw new Nothing
+  override def set2(v: Int): CDIndex = {
+    if (v < 0 || v >= shape2) throw new Exception()
     curr2 = v
-    return this
+    this
   }
 
-  def set3(v: Int): Nothing = {
-    if (v < 0 || v >= shape3) throw new Nothing
+  override def set3(v: Int): CDIndex = {
+    if (v < 0 || v >= shape3) throw new Exception()
     curr3 = v
-    return this
+    this
   }
 
-  def set(v0: Int, v1: Int, v2: Int, v3: Int): Nothing = {
+  override def set(v0: Int, v1: Int, v2: Int, v3: Int): CDIndex = {
     set0(v0)
     set1(v1)
     set2(v2)
     set3(v3)
-    return this
+    this
   }
 
-  def set(index: Array[Int]): Nothing = {
-    if (index.length != rank) throw new Nothing
+  override def set(index: Array[Int]): CDIndex = {
+    if (index.length != rank) throw new Exception()
     set0(index(0))
     set1(index(1))
     set2(index(2))
     set3(index(3))
-    return this
+    this
   }
 
-  def clone: Nothing = {
-    return super.clone
+  private def setDirect(v0: Int, v1: Int, v2: Int, v3: Int): Int = {
+    offset + v0 * stride0 + v1 * stride1 + v2 * stride2 + v3 * stride3
   }
-
-  private[ma2] def setDirect(v0: Int, v1: Int, v2: Int, v3: Int): Int = {
-    return offset + v0 * stride0 + v1 * stride1 + v2 * stride2 + v3 * stride3
-  }
-
-
 }
 
-public
 
-class CDIndex5D extends CDIndex {
+class CDIndex5D(shape: Array[Int], stride: Array[Int], offset: Int = 0) extends CDIndex(shape,stride,offset) {
   private var curr0: Int = 0
-  ,
+
   private var curr1: Int = 0
-  ,
+
   private var curr2: Int = 0
-  ,
+
   private var curr3: Int = 0
-  ,
+
   private var curr4: Int = 0
   private var stride0: Int = 0
-  ,
+
   private var stride1: Int = 0
-  ,
+
   private var stride2: Int = 0
-  ,
+
   private var stride3: Int = 0
-  ,
+
   private var stride4: Int = 0
   private var shape0: Int = 0
-  ,
+
   private var shape1: Int = 0
-  ,
+
   private var shape2: Int = 0
-  ,
+
   private var shape3: Int = 0
-  ,
+
   private var shape4: Int = 0
 
-  def this {
-    this()
-    super (5)
-  }
 
   def this(shape: Array[Int]) {
-    this()
-    super (shape)
+    this (shape)
     precalc
   }
 
-  protected def precalc {
+  override  def precalc {
     shape0 = shape(0)
     shape1 = shape(1)
     shape2 = shape(2)
@@ -965,24 +790,24 @@ class CDIndex5D extends CDIndex {
     curr4 = current(4)
   }
 
-  def toString: Nothing = {
-    return curr0 + "," + curr1 + "," + curr2 + "," + curr3 + "," + curr4
+  override def toString: String = {
+    curr0 + "," + curr1 + "," + curr2 + "," + curr3 + "," + curr4
   }
 
-  def getCurrentCounter: Array[Int] = {
+  override def getCurrentCounter: Array[Int] = {
     current(0) = curr0
     current(1) = curr1
     current(2) = curr2
     current(3) = curr3
     current(4) = curr4
-    return current.clone
+    current.clone
   }
 
-  def currentElement: Int = {
-    return offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3 + curr4 * stride4
+  override def currentElement: Int = {
+    offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3 + curr4 * stride4
   }
 
-  def incr: Int = {
+  override def incr: Int = {
     if (({
       curr4 += 1; curr4
     }) >= shape4) {
@@ -1008,11 +833,11 @@ class CDIndex5D extends CDIndex {
         }
       }
     }
-    return offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3 + curr4 * stride4
+    offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3 + curr4 * stride4
   }
 
-  def setDim(dim: Int, value: Int) {
-    if (value < 0 || value >= shape(dim)) throw new Nothing
+  override def setDim(dim: Int, value: Int) {
+    if (value < 0 || value >= shape(dim)) throw new Exception()
     if (dim == 4) curr4 = value
     else if (dim == 3) curr3 = value
     else if (dim == 2) curr2 = value
@@ -1020,57 +845,57 @@ class CDIndex5D extends CDIndex {
     else curr0 = value
   }
 
-  def set0(v: Int): Nothing = {
-    if (v < 0 || v >= shape0) throw new Nothing
+  override def set0(v: Int): CDIndex = {
+    if (v < 0 || v >= shape0) throw new Exception()
     curr0 = v
-    return this
+    this
   }
 
-  def set1(v: Int): Nothing = {
-    if (v < 0 || v >= shape1) throw new Nothing
+  override def set1(v: Int): CDIndex = {
+    if (v < 0 || v >= shape1) throw new Exception()
     curr1 = v
-    return this
+    this
   }
 
-  def set2(v: Int): Nothing = {
-    if (v < 0 || v >= shape2) throw new Nothing
+  override def set2(v: Int): CDIndex = {
+    if (v < 0 || v >= shape2) throw new Exception()
     curr2 = v
-    return this
+    this
   }
 
-  def set3(v: Int): Nothing = {
-    if (v < 0 || v >= shape3) throw new Nothing
+  override def set3(v: Int): CDIndex = {
+    if (v < 0 || v >= shape3) throw new Exception()
     curr3 = v
-    return this
+    this
   }
 
-  def set4(v: Int): Nothing = {
-    if (v < 0 || v >= shape4) throw new Nothing
+  override def set4(v: Int): CDIndex = {
+    if (v < 0 || v >= shape4) throw new Exception()
     curr4 = v
-    return this
+    this
   }
 
-  def set(index: Array[Int]): Nothing = {
-    if (index.length != rank) throw new Nothing
+  override def set(index: Array[Int]): CDIndex = {
+    if (index.length != rank) throw new Exception()
     set0(index(0))
     set1(index(1))
     set2(index(2))
     set3(index(3))
     set4(index(4))
-    return this
+    this
   }
 
-  def set(v0: Int, v1: Int, v2: Int, v3: Int, v4: Int): Nothing = {
+  override def set(v0: Int, v1: Int, v2: Int, v3: Int, v4: Int): CDIndex = {
     set0(v0)
     set1(v1)
     set2(v2)
     set3(v3)
     set4(v4)
-    return this
+    this
   }
 
-  private[ma2] def setDirect(v0: Int, v1: Int, v2: Int, v3: Int, v4: Int): Int = {
-    return offset + v0 * stride0 + v1 * stride1 + v2 * stride2 + v3 * stride3 + v4 * stride4
+  private def setDirect(v0: Int, v1: Int, v2: Int, v3: Int, v4: Int): Int = {
+    offset + v0 * stride0 + v1 * stride1 + v2 * stride2 + v3 * stride3 + v4 * stride4
   }
 }
 

@@ -29,15 +29,6 @@ trait IndexExtensions extends ma2.Index {
   }
 }
 
-class CDIndex( _shape: Array[Int], _stride: Array[Int] ) extends ma2.Index( _shape, _stride ) with IndexExtensions {
-  def wrap( index: ma2.Index ): CDIndex = {
-    val new_index = new CDIndex( index.shape, index.stride )
-    new_index.offset = index.offset
-    new_index
-  }
-}
-
-
 class Ma2MaskedFloatTensor( protected val tensor: ma2.ArrayFloat, val invalidOpt: Option[Float] = None  ) {
 
   def this( array: Array[Float], shape: Array[Int], invalidOpt: Option[Float] ) =
@@ -74,7 +65,7 @@ class Ma2MaskedFloatTensor( protected val tensor: ma2.ArrayFloat, val invalidOpt
   def getFloat( index: Int ): Float = tensor.getFloat( index )
   def getFloat( index: ma2.Index ): Float = tensor.getFloat( index )
 
-  protected def createView( index: ma2.Index, array: ma2.ArrayFloat ) = ma2.Array.factory( ma2.DataType.FLOAT, index, array.getStorage )
+//  protected def createView( index: ma2.Index, array: ma2.ArrayFloat ) = ma2.Array.factory( ma2.DataType.FLOAT, index, array.getStorage )
 
 //  def	broadcast( dim: Int, size: Int ): Ma2MaskedFloatTensor = {
 //    val index: IndexExtensions = CDIndex.wrap(tensor.getIndex).broadcast(dim,size)

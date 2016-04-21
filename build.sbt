@@ -23,4 +23,4 @@ libraryDependencies ++= Dependencies.ndarray
 
 libraryDependencies ++= Dependencies.geo
 
-// libraryDependencies ++= Dependencies.netcdf    Maven version of Jar does not work- Currently unmanaged.
+// libraryDependencies ++= Dependencies.netcdf

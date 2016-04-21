@@ -22,7 +22,7 @@ object Library {
   val joda           = "joda-time"          % "joda-time"       % "2.8.1"
   val natty          = "com.joestelmach"    % "natty"           % "0.11"
   val geotools       = "org.geotools"      %  "gt-shapefile"    % "13.2"
-  val netcdfAll      = "edu.ucar"           % "netcdfAll"       % "4.6.3"
+  val netcdfAll      = "edu.ucar"           % "netcdf"          % "4.3.23"
 }
 
 object Dependencies {
