@@ -1,5 +1,6 @@
 package nasa.nccs.cdapi.tensors
 import ucar.ma2
+import ucar.ma2.ArrayFloat
 
 object Ma2MaskedFloatTensor {
 
@@ -7,6 +8,32 @@ object Ma2MaskedFloatTensor {
     case ma2.DataType.FLOAT => new Ma2MaskedFloatTensor(tensor.asInstanceOf[ma2.ArrayFloat], invalidOpt)
     case ma2.DataType.DOUBLE => new Ma2MaskedFloatTensor( tensor.getStorage.asInstanceOf[Array[Double]].map(_.toFloat), tensor.getShape, invalidOpt )
     case ma2.DataType.INT =>    new Ma2MaskedFloatTensor( tensor.getStorage.asInstanceOf[Array[Int]].map(_.toFloat), tensor.getShape, invalidOpt )
+  }
+}
+
+trait IndexExtensions extends ma2.Index {
+
+  def broadcast(  dim: Int, size: Int ): IndexExtensions = {
+    assert( shape(dim) == 1, "Can't broadcast a dimension with size > 1" )
+    shape(dim) = size
+    this
+  }
+
+  def broadcast( bcast_shape: Array[Int] ): IndexExtensions = {
+    assert ( bcast_shape.length == rank, "Can't broadcast shape (%s) to (%s)".format( shape.mkString(","), bcast_shape.mkString(",") ) )
+    for( idim <- (0 until rank ); bsize = bcast_shape(idim); size0 = shape(idim)  ) {
+      assert((size0 == 1) || (bsize == size0), "Can't broadcast shape (%s) to (%s)".format(shape.mkString(","), bcast_shape.mkString(",")))
+      shape(idim) = bsize
+    }
+    this
+  }
+}
+
+class CDIndex( _shape: Array[Int], _stride: Array[Int] ) extends ma2.Index( _shape, _stride ) with IndexExtensions {
+  def wrap( index: ma2.Index ): CDIndex = {
+    val new_index = new CDIndex( index.shape, index.stride )
+    new_index.offset = index.offset
+    new_index
   }
 }
 
@@ -25,16 +52,20 @@ class Ma2MaskedFloatTensor( protected val tensor: ma2.ArrayFloat, val invalidOpt
   def getElementType: ma2.DataType = ma2.DataType.getType(tensor.getElementType)
   def reshape( shape: Array[Int]): Ma2MaskedFloatTensor= wrap(tensor.reshape(shape))
   def wrap( new_tensor: ma2.Array ): Ma2MaskedFloatTensor = Ma2MaskedFloatTensor( new_tensor, invalidOpt )
+  def getShape = tensor.getShape
+  private val shape = tensor.getShape
 
-  def section(origin: Array[Int], shape: Array[Int]) : Ma2MaskedFloatTensor= wrap(tensor.section(origin,shape))
-  def section(origin: Array[Int], shape: Array[Int], stride: Array[Int]): Ma2MaskedFloatTensor= wrap(tensor.section(origin,shape,stride))
-  def section(ranges: java.util.List[ma2.Range] ): Ma2MaskedFloatTensor= wrap(tensor.section(ranges))
-  def sectionNoReduce(origin: Array[Int], shape: Array[Int], stride: Array[Int]): Ma2MaskedFloatTensor= wrap(tensor.sectionNoReduce(origin,shape,stride))
-  def sectionNoReduce(ranges: java.util.List[ma2.Range] ): Ma2MaskedFloatTensor= wrap(tensor.sectionNoReduce(ranges))
+  def section( origin: Array[Int], shape: Array[Int], stride: Array[Int] ): Ma2MaskedFloatTensor= wrap(tensor.sectionNoReduce(origin,shape,stride))
+  def section( origin: Array[Int], shape: Array[Int] ): Ma2MaskedFloatTensor= wrap(tensor.sectionNoReduce(origin,shape,null))
+  def section( ranges: java.util.List[ma2.Range] ): Ma2MaskedFloatTensor= wrap(tensor.sectionNoReduce(ranges))
 
   def slice(origin: Array[Int], shape: Array[Int]): Ma2MaskedFloatTensor= wrap(tensor.section(origin,shape))
 
-  def	slice( dim: Int, value: Int ): Ma2MaskedFloatTensor= wrap(tensor.slice( dim, value ))
+  def	slice( dim: Int, value: Int ): Ma2MaskedFloatTensor = {
+    val origin: Array[Int] = (0 until getRank).map( i => if(i==dim) value else 0 ).toArray
+    val shape: Array[Int] = (0 until getRank).map( i => if(i==dim) 1 else shape(i) ).toArray
+    wrap( tensor.sectionNoReduce(origin,shape,null) )
+  }
   def	transpose( dim1: Int, dim2: Int ): Ma2MaskedFloatTensor= wrap(tensor.transpose( dim1, dim2 ))
   def	permute( dims: Array[Int] ): Ma2MaskedFloatTensor= wrap(tensor.permute( dims ))
   def	reduce( dim: Int ): Ma2MaskedFloatTensor= wrap(tensor.reduce( dim ))
@@ -42,6 +73,13 @@ class Ma2MaskedFloatTensor( protected val tensor: ma2.ArrayFloat, val invalidOpt
   def	reduce(  ): Ma2MaskedFloatTensor= wrap(tensor.reduce())
   def getFloat( index: Int ): Float = tensor.getFloat( index )
   def getFloat( index: ma2.Index ): Float = tensor.getFloat( index )
+
+  protected def createView( index: ma2.Index, array: ma2.ArrayFloat ) = ma2.Array.factory( ma2.DataType.FLOAT, index, array.getStorage )
+
+//  def	broadcast( dim: Int, size: Int ): Ma2MaskedFloatTensor = {
+//    val index: IndexExtensions = CDIndex.wrap(tensor.getIndex).broadcast(dim,size)
+//    wrap( tensor.createView( index,  ) )
+//  }
 
   //  def getDataArray: Array = ma2.DataType.getType(tensor.getElementType) match {
 //    case ma2.DataType.FLOAT => tensor.getStorage.asInstanceOf[Array[Float]]
