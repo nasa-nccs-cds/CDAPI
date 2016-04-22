@@ -1,47 +1,36 @@
 package nasa.nccs.cdapi.tensors
 import scala.collection.mutable.ListBuffer
 import java.nio._
-
 import ucar.ma2
-import ucar.ma2.DataType
 
-
-object CDArray {
-  def factory(shape: Array[Int], storage: Array[AnyVal]): CDArray = {
-    return factory( CDIndex.factory(shape), storage)
-  }
-
-  def factory( index: CDIndex, storage: Array[AnyVal] ): CDArray = {
-    storage.head.getClass.getSimpleName match {
-      case "float" => return CDArrayFloat.factory( index, storage.asInstanceOf[Array[Float]] )
-      case "int" => return CDArrayInt.factory( index, storage.asInstanceOf[Array[Int]] )
-      case "byte" => return CDCDArrayByte.factory( index, storage.asInstanceOf[Array[Byte]] )
-      case x => throw new Exception("Cant use this method for datatype " + x )
-    }
-  }
-}
-
-abstract class CDArray( val dataType: ma2.DataType, val indexCalc: CDIndex)  {
-
-  def rank = indexCalc.rank
-
-
-  def getNewIndex: CDIndex = {
-    new CDIndex( this.indexCalc ).initIteration()
-  }
-
-  def getStorage: Array[AnyVal]
+class CDArray[T]( private val indexCalc: CDIndex, private val storage: Array[T] )  {
+  private val rank = indexCalc.getRank
+  private val dataType = getDataType
 
   def getDataType: ma2.DataType = {
-    return this.dataType
+    storage.headOption match {
+      case Some(elem) => elem.getClass.getCanonicalName match {
+        case "float" => ma2.DataType.FLOAT
+        case "int" => ma2.DataType.INT
+        case "btye" => ma2.DataType.BYTE
+        case "char" => ma2.DataType.CHAR
+        case "short" => ma2.DataType.SHORT
+        case "double" => ma2.DataType.DOUBLE
+        case "long" => ma2.DataType.LONG
+        case x => throw new Exception( "Unsupported elem type in CDArray: " + x)
+      }
+      case None => ma2.DataType.OPAQUE
+    }
   }
+
+  def isStorageCongruent: Boolean = ( indexCalc.getSize == storage.length ) && !indexCalc.broadcasted
 
   def getIndex: CDIndex = {
     return new CDIndex( this.indexCalc )
   }
 
   def getIterator: CDIterator = {
-    return new CDIterator( indexCalc )
+    return if(isStorageCongruent) new CDStorageIndexIterator( indexCalc ) else CDIterator.factory( indexCalc )
   }
 
   def getRank: Int = {
@@ -64,17 +53,18 @@ abstract class CDArray( val dataType: ma2.DataType, val indexCalc: CDIndex)  {
     return section(ranges).getIterator
   }
 
-  def getElementType: Nothing
+  def getStorage: Array[T] = storage
 
-  def getStorage: Nothing
+  def copySectionData: List[T] = {
+    val lbuff = ListBuffer.empty[T]
+    val iter = getIterator
+    while( iter.hasNext ) { lbuff += getValue( iter.next() ) }
+    lbuff.toList
+  }
 
-  protected def copyFrom1DJavaArray(iter: Nothing, javaArray: Nothing)
+  def getSectionData: Array[T] = if( isStorageCongruent ) getStorage else copySectionData
 
-  protected def copyTo1DJavaArray(iter: Nothing, javaArray: Nothing)
-
-  protected def createView( index: CDIndex ): CDArray
-
-  def section(ranges: List[ma2.Range]): CDArray = {
+  def section(ranges: List[ma2.Range]): CDArray[T] = {
     return createView(indexCalc.section(ranges))
   }
 
@@ -90,11 +80,10 @@ abstract class CDArray( val dataType: ma2.DataType, val indexCalc: CDIndex)  {
     rangeSeq.toList
   }
 
+  def section(origin: Array[Int], shape: Array[Int], strideOpt: Option[Array[Int]]=None): CDArray[T] =
+    createView(indexCalc.section(createRanges(origin,shape,strideOpt)))
 
-  def section(origin: Array[Int], shape: Array[Int], strideOpt: Option[Array[Int]]=None): CDArray = createView(indexCalc.section(createRanges(origin,shape,strideOpt)))
-
-
-  def slice(dim: Int, value: Int): CDArray = {
+  def slice(dim: Int, value: Int): CDArray[T] = {
     val origin: Array[Int] = new Array[Int](rank)
     val shape: Array[Int] = getShape
     origin(dim) = value
@@ -102,43 +91,31 @@ abstract class CDArray( val dataType: ma2.DataType, val indexCalc: CDIndex)  {
     section(origin, shape).reduce(dim)
   }
 
-  def getDataAsByteBuffer: ByteBuffer = {
-    throw new Exception( "Unimplemented method")
-  }
-
-
-  def flip(dim: Int): CDArray = {
+  def flip(dim: Int): CDArray[T] = {
     return createView(indexCalc.flip(dim))
   }
 
-  def transpose(dim1: Int, dim2: Int): CDArray = {
+  def transpose(dim1: Int, dim2: Int): CDArray[T] = {
     return createView(indexCalc.transpose(dim1, dim2))
   }
 
-  def permute(dims: Array[Int]): CDArray = {
+  def permute(dims: Array[Int]): CDArray[T] = {
     return createView(indexCalc.permute(dims))
   }
 
-  def reshape(shape: Array[Int]): CDArray = {
-    val result: Array = Array.factory(this.getDataType, shape)
-    if (result.getSize != getSize) throw new Nothing("reshape arrays must have same total size")
-    Array.arraycopy(this, 0, result, 0, getSize.toInt)
-    return result
+  def reshape(shape: Array[Int]): CDArray[T] = {
+    if( shape.product != getSize ) throw new IllegalArgumentException("reshape arrays must have same total size")
+    new CDArray( new CDIndex(shape), getSectionData )
   }
 
-  def reshapeNoCopy(shape: Array[Int]): CDArray = {
-    val result: Array = Array.factory(this.getDataType, shape, getStorage)
-    if (result.getSize != getSize) throw new Nothing("reshape arrays must have same total size")
-    return result
-  }
 
-  def reduce: CDArray = {
+  def reduce: CDArray[T] = {
     val ri: CDIndex = indexCalc.reduce
     if (ri eq indexCalc) return this
     return createView(ri)
   }
 
-  def reduce(dim: Int): CDArray = {
+  def reduce(dim: Int): CDArray[T] = {
     return createView(indexCalc.reduce(dim))
   }
 
@@ -146,365 +123,30 @@ abstract class CDArray( val dataType: ma2.DataType, val indexCalc: CDIndex)  {
     return false
   }
 
-  def getFloat(ima: Nothing): Float
-
-  def setFloat(ima: Nothing, value: Float)
-
-  def getInt(ima: Nothing): Int
-
-  def setInt(ima: Nothing, value: Int)
-
-  def getByte(ima: Nothing): Byte
-
-  def setByte(ima: Nothing, value: Byte)
-
-  def getFloat(elem: Int): Float
-
-  def setFloat(elem: Int, `val`: Float)
-
-  def getInt(elem: Int): Int
-
-  def setInt(elem: Int, value: Int)
-
-  def getByte(elem: Int): Byte
-
-  def setByte(elem: Int, value: Byte)
-
-//
-//  private var ii: Nothing = null
-//
-//  def hasNext: Boolean = {
-//    if (null == ii) ii = getIndexIterator
-//    return ii.hasNext
-//  }
-//
-//  def next: Nothing = {
-//    return ii.getObjectNext
-//  }
-//
-//  def nextFloat: Float = {
-//    return ii.getFloatNext
-//  }
-//
-//  def nextByte: Byte = {
-//    return ii.getByteNext
-//  }
-//
-//  def nextShort: Short = {
-//    return ii.getShortNext
-//  }
-//
-//  def nextInt: Int = {
-//    return ii.getIntNext
-//  }
-//  def resetLocalIterator {
-//    ii = null
-//  }
-}
-
-
-
-class CDArrayInt( index: CDIndex, var storage: Array[Int] ) extends CDArray( ma2.DataType.INT, index ) {
-
-  protected def createView(index: Nothing): Nothing = {
-    return CDArrayInt.factory(index, isUnsigned, storage)
+  protected def createView( index: CDIndex ): CDArray[T] = {
+    return new CDArray[T](index, storage)
   }
 
-  def getStorage: Nothing = {
-    return storage
-  }
-
-  protected def copyFrom1DJavaArray(iter: Nothing, javaArray: Nothing) {
-    val ja: Array[Int] = javaArray.asInstanceOf[Array[Int]]
-    for (aJa <- ja) iter.setIntNext(aJa)
-  }
-
-  protected def copyTo1DJavaArray(iter: Nothing, javaArray: Nothing) {
-    val ja: Array[Int] = javaArray.asInstanceOf[Array[Int]]
-    var i: Int = 0
-    while (i < ja.length) {
-      ja(i) = iter.getIntNext
-      ({
-        i += 1; i - 1
-      })
+  def getDataAsByteBuffer: ByteBuffer = {
+    val bb: ByteBuffer = ByteBuffer.allocate( ( dataType.getSize * getSize ).asInstanceOf[Int] )
+    dataType match {
+      case ma2.DataType.FLOAT => bb.asFloatBuffer.put( getSectionData.asInstanceOf[Array[Float]] )
+      case ma2.DataType.INT => bb.asIntBuffer.put( getSectionData.asInstanceOf[Array[Int]] )
+      case ma2.DataType.BYTE => bb.put( getSectionData.asInstanceOf[Array[Byte]] )
+      case ma2.DataType.SHORT => bb.asShortBuffer.put( getSectionData.asInstanceOf[Array[Short]] )
+      case ma2.DataType.DOUBLE => bb.asDoubleBuffer.put( getSectionData.asInstanceOf[Array[Double]] )
+      case ma2.DataType.CHAR => bb.asCharBuffer.put( getSectionData.asInstanceOf[Array[Char]] )
+      case ma2.DataType.LONG => bb.asLongBuffer.put( getSectionData.asInstanceOf[Array[Long]] )
     }
-  }
-
-  def getDataAsByteBuffer: Nothing = {
-    return getDataAsByteBuffer(null)
-  }
-
-  def getDataAsByteBuffer(order: Nothing): Nothing = {
-    val bb: Nothing = super.getDataAsByteBuffer((4 * getSize).asInstanceOf[Int], order)
-    val ib: Nothing = bb.asIntBuffer
-    ib.put(get1DJavaArray(classOf[Int]).asInstanceOf[Array[Int]])
     return bb
   }
 
-  def getElementType: Nothing = {
-    return classOf[Int]
-  }
-
-  def get(i: CDIndex): Int = {
-    return storage(i.currentElement)
-  }
-
-  def set(i: CDIndex, value: Int) {
-    storage(i.currentElement) = value
-  }
-
-  def getFloat(i: CDIndex): Float = {
-    val `val`: Int = storage(i.currentElement)
-    return (if (isUnsigned) ma2.DataType.unsignedIntToLong(`val`)
-    else `val`).toFloat
-  }
-
-  def setFloat(i: CDIndex, value: Float) {
-    storage(i.currentElement) = value.toInt
-  }
-
-
-  def getInt(i: CDIndex): Int = {
-    return storage(i.currentElement)
-  }
-
-  def setInt(i: CDIndex, value: Int) {
-    storage(i.currentElement) = value
-  }
-
-
-  def getByte(i: CDIndex): Byte = {
-    return storage(i.currentElement).toByte
-  }
-
-  def setByte(i: CDIndex, value: Byte) {
-    storage(i.currentElement) = value.toInt
-  }
-
-  def getFloat(index: Int): Float = {
-    val `val`: Int = storage(index)
-    return (if (isUnsigned) ma2.DataType.unsignedIntToLong(`val`)
-    else `val`).toFloat
-  }
-
-  def setFloat(index: Int, value: Float) {
-    storage(index) = value.toInt
-  }
-
-
-  def getInt(index: Int): Int = {
+  def getValue(index: Int): T = {
     return storage(index)
   }
-
-  def setInt(index: Int, value: Int) {
-    storage(index) = value
-  }
-
 }
 
-class CDArrayFloat( index: CDIndex, var storage: Array[Float] ) extends CDArray( ma2.DataType.FLOAT, index ) {
 
-
-  protected def createView(index: CDIndex ): CDArrayFloat = {
-    return CDArrayFloat.factory(index, storage)
-  }
-
-  def getStorage: Array[AnyVal] = {
-    return storage
-  }
-
-  protected def copyFrom1DJavaArray(iter: Nothing, javaArray: Nothing) {
-    val ja: Array[Float] = javaArray.asInstanceOf[Array[Float]]
-    for (aJa <- ja) iter.setFloatNext(aJa)
-  }
-
-  protected def copyTo1DJavaArray(iter: Nothing, javaArray: Nothing) {
-    val ja: Array[Float] = javaArray.asInstanceOf[Array[Float]]
-    var i: Int = 0
-    while (i < ja.length) {
-      ja(i) = iter.getFloatNext
-      ({
-        i += 1; i - 1
-      })
-    }
-  }
-
-  def getDataAsByteBuffer: Nothing = {
-    val bb: Nothing = ByteBuffer.allocate((4 * getSize).asInstanceOf[Int])
-    val ib: Nothing = bb.asFloatBuffer
-    ib.put(get1DJavaArray(ma2.DataType.FLOAT).asInstanceOf[Array[Float]])
-    return bb
-  }
-
-  def getElementType: Nothing = {
-    return classOf[Float]
-  }
-
-  def get(i: CDIndex): Float = {
-    return storage(i.currentElement)
-  }
-
-  def set(i: CDIndex, value: Float) {
-    storage(i.currentElement) = value
-  }
-
-  def getFloat(i: CDIndex): Float = {
-    return storage(i.currentElement)
-  }
-
-  def setFloat(i: CDIndex, value: Float) {
-    storage(i.currentElement) = value
-  }
-
-  def getInt(i: CDIndex): Int = {
-    return storage(i.currentElement).toInt
-  }
-
-  def setInt(i: CDIndex, value: Int) {
-    storage(i.currentElement) = value.toFloat
-  }
-
-  def getByte(i: CDIndex): Byte = {
-    return storage(i.currentElement).toByte
-  }
-
-  def setByte(i: CDIndex, value: Byte) {
-    storage(i.currentElement) = value.toFloat
-  }
-
-  def getFloat(index: Int): Float = {
-    return storage(index)
-  }
-
-  def setFloat(index: Int, value: Float) {
-    storage(index) = value
-  }
-
-  def getInt(index: Int): Int = {
-    return storage(index).toInt
-  }
-
-  def setInt(index: Int, value: Int) {
-    storage(index) = value.toFloat
-  }
-
-  def getByte(index: Int): Byte = {
-    return storage(index).toByte
-  }
-
-  def setByte(index: Int, value: Byte) {
-    storage(index) = value.toFloat
-  }
-
-}
-
-class CDArrayByte( index: CDIndex, var storage: Array[Byte] ) extends CDArray( ma2.DataType.Byte, index ) {
-
-  protected def createView(index: CDIndex): CDArrayByte = {
-    return CDArrayByte.factory(index, storage)
-  }
-
-  def getStorage: Nothing = {
-    return storage
-  }
-
-  protected def copyFrom1DJavaArray(iter: Nothing, javaArray: Nothing) {
-    val ja: Array[Byte] = javaArray.asInstanceOf[Array[Byte]]
-    for (aJa <- ja) iter.setByteNext(aJa)
-  }
-
-  protected def copyTo1DJavaArray(iter: Nothing, javaArray: Nothing) {
-    val ja: Array[Byte] = javaArray.asInstanceOf[Array[Byte]]
-    var i: Int = 0
-    while (i < ja.length) {
-      ja(i) = iter.getByteNext
-      ({
-        i += 1; i - 1
-      })
-    }
-  }
-
-  @Override def getDataAsByteBuffer: Nothing = {
-    return getDataAsByteBuffer(null)
-  }
-
-  def getDataAsByteBuffer(order: Nothing): Nothing = {
-    return ByteBuffer.wrap(get1DJavaArray(getDataType).asInstanceOf[Array[Byte]])
-  }
-
-  def getElementType: Nothing = {
-    return classOf[Byte]
-  }
-
-  def get(i: CDIndex): Byte = {
-    return storage(i.currentElement)
-  }
-
-  def set(i: CDIndex, value: Byte) {
-    storage(i.currentElement) = value
-  }
-
-  def getFloat(i: CDIndex): Float = {
-    val `val`: Byte = storage(i.currentElement)
-    return (if (isUnsigned) ma2.DataType.unsignedByteToShort(`val`)
-    else `val`).toFloat
-  }
-
-  def setFloat(i: CDIndex, value: Float) {
-    storage(i.currentElement) = value.toByte
-  }
-
-  def getInt(i: CDIndex): Int = {
-    val `val`: Byte = storage(i.currentElement)
-    return (if (isUnsigned) ma2.DataType.unsignedByteToShort(`val`)
-    else `val`).toInt
-  }
-
-  def setInt(i: CDIndex, value: Int) {
-    storage(i.currentElement) = value.toByte
-  }
-
-
-
-  def getByte(i: CDIndex): Byte = {
-    return storage(i.currentElement)
-  }
-
-  def setByte(i: CDIndex, value: Byte) {
-    storage(i.currentElement) = value
-  }
-
-
-  def getFloat(index: Int): Float = {
-    val `val`: Byte = storage(index)
-    return (if (isUnsigned) ma2.DataType.unsignedByteToShort(`val`)
-    else `val`).toFloat
-  }
-
-  def setFloat(index: Int, value: Float) {
-    storage(index) = value.toByte
-  }
-
-  def getInt(index: Int): Int = {
-    val `val`: Byte = storage(index)
-    return (if (isUnsigned) ma2.DataType.unsignedByteToShort(`val`)
-    else `val`).toInt
-  }
-
-  def setInt(index: Int, value: Int) {
-    storage(index) = value.toByte
-  }
-
-  def getByte(index: Int): Byte = {
-    return storage(index)
-  }
-
-  def setByte(index: Int, value: Byte) {
-    storage(index) = value
-  }
-
-
-}
 
 
 
