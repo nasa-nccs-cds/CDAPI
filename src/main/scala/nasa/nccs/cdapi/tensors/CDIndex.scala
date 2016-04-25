@@ -163,13 +163,13 @@ abstract class CDIterator( index: CDIndex  ) extends collection.Iterator[Int] {
 
 class CDArrayIndexIterator( index: CDIndex  ) extends CDIterator(index) {
   private var count: Int = 0
-  private var currElement: Int = 0
-  private var size = cdIndex.getSize
+  private var currElement: Int = currentElement
+  private var numElem = cdIndex.getSize
 
-  def hasNext: Boolean = ( count < size )
+  def hasNext: Boolean = ( count < numElem )
   def next(): Int = {
+    if(count>0) { currElement = incr }
     count += 1
-    currElement = incr
     currElement
   }
   def getCoordinateIndices: Array[Int] = getCoordIndices
@@ -178,10 +178,10 @@ class CDArrayIndexIterator( index: CDIndex  ) extends CDIterator(index) {
 }
 
 class CDStorageIndexIterator( index: CDIndex  ) extends CDIterator(index) {
-  private var count: Int = 0
-  private var size = cdIndex.getSize
+  private var count: Int = -1
+  private var countBound = cdIndex.getSize - 1
 
-  def hasNext: Boolean = ( count < size )
+  def hasNext: Boolean = ( count < countBound )
   def next(): Int = {
     count += 1
     count
@@ -205,15 +205,24 @@ class CDIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyI
     this( index.shape, index.stride, index.offset )
   }
 
+  override def toString: String = {
+    "{ Shape: " + shape.mkString("[ ",", "," ], Stride: " + _stride.mkString("[ ",", "," ]") + " Offset: " + offset + " } ")
+  }
+
   def broadcasted: Boolean = {
     for( i <- (0 until rank) ) if( (stride(i) == 0) && (shape(i) > 1) ) return true
     false
   }
 
   def computeStrides( shape: Array[Int] ): Array[Int] = {
-    var product: Long = 1
-    var strides = for (ii <- (shape.length - 1 to 0 by -1); thisDim = shape(ii) ) yield if (thisDim >= 0) { product *= thisDim; product.toInt } else { 0 }
-    return strides.toArray
+    var product: Int = 1
+    var strides = for (ii <- (shape.length - 1 to 0 by -1); thisDim = shape(ii) ) yield
+      if (thisDim >= 0) {
+        val curr_stride = product
+        product *= thisDim
+        curr_stride
+      } else { 0 }
+    return strides.reverse.toArray
   }
 
   def flip(index: Int): CDIndex = {
@@ -233,7 +242,6 @@ class CDIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyI
       assert ((r.first >= 0) && (r.first < shape(ii)), "Bad range starting value at index " + ii + " == " + r.first)
       assert ((r.last >= 0) && (r.last < shape(ii)), "Bad range ending value at index " + ii + " == " + r.last)
     }
-
     var _offset: Int = offset
     val _shape: Array[Int] = Array.fill[Int](rank)(0)
     val _stride: Array[Int] = Array.fill[Int](rank)(0)
@@ -299,18 +307,22 @@ class CDIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyI
   def broadcast(  dim: Int, size: Int ): CDIndex = {
     assert( shape(dim) == 1, "Can't broadcast a dimension with size > 1" )
     val _shape = shape.clone()
+    val _stride = stride.clone()
     _shape(dim) = size
-    CDIndex.factory( _shape, stride, offset )
+    _stride(dim) = 0
+    CDIndex.factory( _shape, _stride, offset )
   }
 
   def broadcast( bcast_shape: Array[Int] ): CDIndex = {
     assert ( bcast_shape.length == rank, "Can't broadcast shape (%s) to (%s)".format( shape.mkString(","), bcast_shape.mkString(",") ) )
     val _shape = shape.clone()
-    for( idim <- (0 until rank ); bsize = bcast_shape(idim); size0 = shape(idim)  ) {
+    val _stride = stride.clone()
+    for( idim <- (0 until rank ); bsize = bcast_shape(idim); size0 = shape(idim); if( bsize != size0 )  ) {
       assert((size0 == 1) || (bsize == size0), "Can't broadcast shape (%s) to (%s)".format(shape.mkString(","), bcast_shape.mkString(",")))
       _shape(idim) = bsize
+      _stride(idim) = 0
     }
-    CDIndex.factory( _shape, stride, offset )
+    CDIndex.factory( _shape, _stride, offset )
   }
 
   def getRank: Int = {
