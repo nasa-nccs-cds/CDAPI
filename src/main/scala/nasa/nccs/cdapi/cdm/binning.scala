@@ -1,9 +1,7 @@
 package nasa.nccs.cdapi.cdm
 import java.util.Formatter
-import nasa.nccs.cdapi.tensors.Nd4jMaskedTensor
+import nasa.nccs.cdapi.tensors.{ CDArray, CDFloatArray }
 import nasa.nccs.utilities.cdsutils
-import org.nd4j.linalg.api.ndarray.INDArray
-import org.nd4j.linalg.factory.Nd4j
 import ucar.nc2.constants.AxisType
 import ucar.nc2.dataset.{CoordinateAxis1DTime, CoordinateAxis1D}
 import ucar.nc2.time.CalendarPeriod.Field._
@@ -24,9 +22,9 @@ trait BinAccumulator {
 
 trait BinSliceAccumulator {
   def reset: Unit
-  def insert( values: Nd4jMaskedTensor ): Unit
+  def insert( values: CDFloatArray ): Unit
   def nresults: Int
-  def result( index: Int = 0 ): Option[Nd4jMaskedTensor]
+  def result( index: Int = 0 ): Option[CDFloatArray]
 }
 
 object BinnedArrayFactory {
@@ -83,8 +81,8 @@ class BinnedArrayFactory( val axis: Char, val step: String, val reducer: String,
 
 trait IBinnedSliceArray {
   def nresults: Int
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit
-  def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor]
+  def insert( binIndex: Int, values: CDFloatArray ): Unit
+  def result( result_index: Int = 0 ): Option[CDFloatArray]
 }
 
 class BinnedArrayBase[T: TypeTag]( val nbins: Int ) {
@@ -103,21 +101,21 @@ class BinnedArrayBase[T: TypeTag]( val nbins: Int ) {
 //}
 
 class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray  {
-  private var refSliceOpt: Option[Nd4jMaskedTensor]  = None
+  private var refSliceOpt: Option[CDFloatArray]  = None
   def nresults = _accumulatorArray(0).nresults
-  def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor] = {
+  def result( result_index: Int = 0 ): Option[CDFloatArray] = {
     val result_masked_arrays = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
-    Some( new Nd4jMaskedTensor( Nd4j.concat( 0, result_masked_arrays.map(_.tensor): _* ), result_masked_arrays(0).invalid ) )
+    Some( new CDFloatArray( CDArray.concat( 0, result_masked_arrays.map(_.tensor): _* ), result_masked_arrays(0).invalid ) )
   }
 
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit = {
+  def insert( binIndex: Int, values: CDFloatArray ): Unit = {
     val bin_index = binIndices(binIndex)
     _accumulatorArray( bin_index ).insert( values )
 //    logger.info( " Insert slice [%s] values = %s into bin %d, accum values = %s ".format(values.shape.mkString(","), values.toDataString,  bin_index, _accumulatorArray( bin_index ).toString ) )
     if(refSliceOpt.isEmpty) refSliceOpt = Some(values)
   }
 
-  private def getAccumulatorResult( bin_index: Int, result_index: Int ): Nd4jMaskedTensor =
+  private def getAccumulatorResult( bin_index: Int, result_index: Int ): CDFloatArray =
     _accumulatorArray(bin_index).result(result_index) match {
       case Some(result_array) => result_array;
       case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
@@ -125,42 +123,42 @@ class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices
 }
 
 class aveSliceAccumulator extends BinSliceAccumulator {
-  private var _value: Option[Nd4jMaskedTensor] = None
+  private var _value: Option[CDFloatArray] = None
   private var _count = 0
   def nresults = 1
   def reset: Unit = { _value = None; _count = 0 }
   override def toString = _value match { case None => "None"; case Some(mtensor) => "Accumulator{ count = %d, value = %s }".format( _count, mtensor.toDataString ) }
 
-  private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = {
+  private def accumulator( template: CDFloatArray ): CDFloatArray = {
     if( _value.isEmpty ) _value = Some( template.zeros )
     _value.get
   }
 
-  def insert( values: Nd4jMaskedTensor ): Unit = {
+  def insert( values: CDFloatArray ): Unit = {
     accumulator(values) += values
     _count += 1
   }
 
-  def result( index: Int = 0 ): Option[Nd4jMaskedTensor] = index match {
+  def result( index: Int = 0 ): Option[CDFloatArray] = index match {
     case 0 => _value match { case None => None;  case Some(accum_array) => Some(accum_array / _count) }
     case x => None
   }
 }
 
 class BinnedAveSliceArray( private val binIndices: Array[Int], val nbins: Int, val dimension: Int )  extends IBinnedSliceArray  {
-  var _values:  Option[Nd4jMaskedTensor] = None
-  var _counts: Option[Nd4jMaskedTensor] = None
+  var _values:  Option[CDFloatArray] = None
+  var _counts: Option[CDFloatArray] = None
   def nresults = 1
-  private def getBinsArray( template: Nd4jMaskedTensor  ): Nd4jMaskedTensor = new Nd4jMaskedTensor( Nd4j.zeros( template.shape.updated(dimension,nbins): _* ), template.invalid )
-  private def initValues( template: Nd4jMaskedTensor ):  Unit = { if( _values.isEmpty ) _values = Some( getBinsArray( template ) ) }
-  private def initCounter( template: Nd4jMaskedTensor ): Unit = { if( _counts.isEmpty ) _counts = Some( getBinsArray( template ) ) }
-  private def accumulator( template: Nd4jMaskedTensor ): Nd4jMaskedTensor = { initValues(template); _values.get }
-  private def binCounts( template: Nd4jMaskedTensor ):   Nd4jMaskedTensor =  { initCounter(template); _counts.get }
+  private def getBinsArray( template: CDFloatArray  ): CDFloatArray = new CDFloatArray( CDArray.zeros( template.getShape.updated(dimension,nbins): _* ), template.invalid )
+  private def initValues( template: CDFloatArray ):  Unit = { if( _values.isEmpty ) _values = Some( getBinsArray( template ) ) }
+  private def initCounter( template: CDFloatArray ): Unit = { if( _counts.isEmpty ) _counts = Some( getBinsArray( template ) ) }
+  private def accumulator( template: CDFloatArray ): CDFloatArray = { initValues(template); _values.get }
+  private def binCounts( template: CDFloatArray ):   CDFloatArray =  { initCounter(template); _counts.get }
 
-  def insert( binIndex: Int, values: Nd4jMaskedTensor ): Unit =
+  def insert( binIndex: Int, values: CDFloatArray ): Unit =
     accumulator(values).slice( binIndices(binIndex), dimension ) :++= ( values, binCounts(values).slice( binIndices(binIndex), dimension ) )
 
-  def result( result_index: Int = 0 ): Option[Nd4jMaskedTensor] = result_index match {
+  def result( result_index: Int = 0 ): Option[CDFloatArray] = result_index match {
     case 0 => _values match {
       case None => None;
       case Some( values ) => Some(values :/ _counts.get) };
@@ -170,7 +168,7 @@ class BinnedAveSliceArray( private val binIndices: Array[Int], val nbins: Int, v
 
 //object binTest extends App {
 //
-//  val array = new Nd4jMaskedTensor( Nd4j.create( Array.fill[Float](100)(1f), Array(25,2,2)) )
+//  val array = new CDFloatArray( Nd4j.create( Array.fill[Float](100)(1f), Array(25,2,2)) )
 //  (0 until 25 by 5).foreach( iC => array.tensor.putScalar( Array(iC,0,0), Float.MaxValue ) )
 //  array.tensor.putScalar( Array(0,1,1), Float.MaxValue )
 //  val bin_array = (0 until 25).map( _ % 5 ).toArray

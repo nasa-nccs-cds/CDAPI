@@ -1,8 +1,7 @@
 package nasa.nccs.cdapi.tensors
 import java.nio._
-
 import ucar.ma2
-import ucar.ma2.ArrayFloat
+
 
 object CDArray {
 
@@ -16,6 +15,9 @@ object CDArray {
       case x => throw new Exception( "Unsupported elem type in CDArray: " + x)
     }
   }
+
+  def factory[T <: AnyVal]( array: ucar.ma2.Array ): CDArray[T] =
+    factory( new CDIndex( array.getShape ), array.get1DJavaArray( array.getElementType ).asInstanceOf[Array[T]] )
 
   def getDataType[T <: AnyVal]( storage: Array[T] ): ma2.DataType = {
     storage.headOption match {
@@ -162,6 +164,22 @@ abstract class CDArray[ T <: AnyVal ]( private val indexCalc: CDIndex, private v
 
   def getValue(index: Int): T = {
     return storage(index)
+  }
+}
+
+object CDFloatArray {
+
+  def factory(array: ucar.ma2.Array): CDFloatArray = {
+    val array_data = array.get1DJavaArray(array.getElementType).asInstanceOf[Array[AnyVal]]
+    val storage: Array[Float] = array.getElementType.getSimpleName.toLowerCase match {
+      case "float" => array_data.asInstanceOf[Array[Float]]
+      case "int" => array_data.asInstanceOf[Array[Int]].map(_.toFloat)
+      case "short" => array_data.asInstanceOf[Array[Short]].map(_.toFloat)
+      case "byte" => array_data.asInstanceOf[Array[Byte]].map(_.toFloat)
+      case "double" => array_data.asInstanceOf[Array[Double]].map(_.toFloat)
+      case x => throw new Exception("Unsupported elem type in CDArray: " + x)
+    }
+    new CDFloatArray(new CDIndex(array.getShape), storage)
   }
 }
 
