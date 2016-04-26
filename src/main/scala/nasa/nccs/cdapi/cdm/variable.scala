@@ -2,7 +2,7 @@ package nasa.nccs.cdapi.cdm
 
 import java.util.Formatter
 
-import nasa.nccs.cdapi.kernels.{AxisIndices, DataFragment}
+import nasa.nccs.cdapi.kernels.AxisIndices
 import nasa.nccs.cdapi.tensors.{ CDArray, CDFloatArray }
 import nasa.nccs.esgf.utilities.numbers.GenericNumber
 import nasa.nccs.utilities.cdsutils
@@ -261,28 +261,27 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
 
 }
 
-object PartitionedFragment {
-  def sectionToIndices( section: ma2.Section ): List[INDArrayIndex] = section.getRanges.map(range => NDArrayIndex.interval( range.first, range.last+1 ) ).toList
-}
-
-class PartitionedFragment( array: CDFloatArray, val fragmentSpec: DataFragmentSpec, metaDataVar: (String, String)*  ) extends DataFragment( array, metaDataVar:_* ) {
+class PartitionedFragment( array: CDFloatArray, val fragmentSpec: DataFragmentSpec, val metaData: (String, String)*  ) {
   val LOG = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def this() = this( new CDFloatArray( CDArray.zeros(0), Float.MaxValue ), new DataFragmentSpec )
+  def this() = this( new CDFloatArray( Array(0), Array.emptyFloatArray ), new DataFragmentSpec )
 
   def getVariableMetadata(serverContext: ServerContext): Map[String,nc2.Attribute] = {
-    fragmentSpec.getVariableMetadata(serverContext) ++ Map( metaDataVar.map( item => (item._1 -> new nc2.Attribute(item._1,item._2)) ) :_* )
+    fragmentSpec.getVariableMetadata(serverContext) ++ Map( metaData.map( item => (item._1 -> new nc2.Attribute(item._1,item._2)) ) :_* )
   }
   def getDatasetMetadata(serverContext: ServerContext): List[nc2.Attribute] = {
     fragmentSpec.getDatasetMetadata(serverContext)
   }
 
+  def data: CDFloatArray = array
+  def shape: List[Int] = array.getShape.toList
+  def getValue( indices: Array[Int] ): Float = array.getValue( indices )
+
   override def toString = { "{Fragment: shape = [%s], section = [%s]}".format( array.getShape.mkString(","), fragmentSpec.roi.toString ) }
 
   def cutIntersection( cutSection: ma2.Section, copy: Boolean = true ): PartitionedFragment = {
     val newFragSpec = fragmentSpec.cutIntersection(cutSection)
-    val indices = PartitionedFragment.sectionToIndices( newFragSpec.roi )
-    val newDataArray: CDFloatArray = array( indices )
+    val newDataArray: CDFloatArray = array.section( newFragSpec.roi.getRanges.toList )
     new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newFragSpec )
   }
 
@@ -290,7 +289,7 @@ class PartitionedFragment( array: CDFloatArray, val fragmentSpec: DataFragmentSp
     if (fragmentSpec.roi.equals( newSection )) this
     else {
       val relativeSection = newSection.shiftOrigin( fragmentSpec.roi )
-      val newDataArray: CDFloatArray = array( PartitionedFragment.sectionToIndices(relativeSection) )
+      val newDataArray: CDFloatArray = array.section( relativeSection.getRanges.toList )
       new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, fragmentSpec.reSection( newSection ) )
     }
   }

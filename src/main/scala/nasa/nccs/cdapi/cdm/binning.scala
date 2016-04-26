@@ -95,39 +95,35 @@ class BinnedArrayBase[T: TypeTag]( val nbins: Int ) {
   }
 }
 
-//class BinnedArray[ T<:BinAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int ) extends BinnedArrayBase[T]( nbins ) {
-//  def insert( binIndex: Int, value: Float ): Unit = _accumulatorArray( binIndices(binIndex) ).insert( value )
-//  def result: Array[Float] = _accumulatorArray.map( _.result ).toArray
+
+//class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray  {
+//  private var refSliceOpt: Option[CDFloatArray]  = None
+//  def nresults = _accumulatorArray(0).nresults
+//  def result( result_index: Int = 0 ): Option[CDFloatArray] = {
+//    val result_masked_arrays = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
+//    Some( new CDFloatArray( CDArray.concat( 0, result_masked_arrays.map(_.tensor): _* ), result_masked_arrays(0).invalid ) )
+//  }
+//
+//  def insert( binIndex: Int, values: CDFloatArray ): Unit = {
+//    val bin_index = binIndices(binIndex)
+//    _accumulatorArray( bin_index ).insert( values )
+////    logger.info( " Insert slice [%s] values = %s into bin %d, accum values = %s ".format(values.shape.mkString(","), values.toDataString,  bin_index, _accumulatorArray( bin_index ).toString ) )
+//    if(refSliceOpt.isEmpty) refSliceOpt = Some(values)
+//  }
+//
+//  private def getAccumulatorResult( bin_index: Int, result_index: Int ): CDFloatArray =
+//    _accumulatorArray(bin_index).result(result_index) match {
+//      case Some(result_array) => result_array;
+//      case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
+//    }
 //}
-
-class BinnedSliceArray[ T<:BinSliceAccumulator: TypeTag ](private val binIndices: Array[Int], nbins: Int )  extends BinnedArrayBase[T]( nbins ) with IBinnedSliceArray  {
-  private var refSliceOpt: Option[CDFloatArray]  = None
-  def nresults = _accumulatorArray(0).nresults
-  def result( result_index: Int = 0 ): Option[CDFloatArray] = {
-    val result_masked_arrays = (0 until nbins).map( getAccumulatorResult(_,result_index) ).toArray
-    Some( new CDFloatArray( CDArray.concat( 0, result_masked_arrays.map(_.tensor): _* ), result_masked_arrays(0).invalid ) )
-  }
-
-  def insert( binIndex: Int, values: CDFloatArray ): Unit = {
-    val bin_index = binIndices(binIndex)
-    _accumulatorArray( bin_index ).insert( values )
-//    logger.info( " Insert slice [%s] values = %s into bin %d, accum values = %s ".format(values.shape.mkString(","), values.toDataString,  bin_index, _accumulatorArray( bin_index ).toString ) )
-    if(refSliceOpt.isEmpty) refSliceOpt = Some(values)
-  }
-
-  private def getAccumulatorResult( bin_index: Int, result_index: Int ): CDFloatArray =
-    _accumulatorArray(bin_index).result(result_index) match {
-      case Some(result_array) => result_array;
-      case None => refSliceOpt match { case Some(refSlice) => refSlice.invalids; case x => throw new Exception( "Attempt to obtain result from empty accumulator") }
-    }
-}
 
 class aveSliceAccumulator extends BinSliceAccumulator {
   private var _value: Option[CDFloatArray] = None
   private var _count = 0
   def nresults = 1
   def reset: Unit = { _value = None; _count = 0 }
-  override def toString = _value match { case None => "None"; case Some(mtensor) => "Accumulator{ count = %d, value = %s }".format( _count, mtensor.toDataString ) }
+  override def toString = _value match { case None => "None"; case Some(mtensor) => "Accumulator{ count = %d, value = %s }".format( _count, mtensor.toString ) }
 
   private def accumulator( template: CDFloatArray ): CDFloatArray = {
     if( _value.isEmpty ) _value = Some( template.zeros )
@@ -135,7 +131,7 @@ class aveSliceAccumulator extends BinSliceAccumulator {
   }
 
   def insert( values: CDFloatArray ): Unit = {
-    accumulator(values) += values
+    _value = Some( accumulator(values) + values )
     _count += 1
   }
 
@@ -149,19 +145,24 @@ class BinnedAveSliceArray( private val binIndices: Array[Int], val nbins: Int, v
   var _values:  Option[CDFloatArray] = None
   var _counts: Option[CDFloatArray] = None
   def nresults = 1
-  private def getBinsArray( template: CDFloatArray  ): CDFloatArray = new CDFloatArray( CDArray.zeros( template.getShape.updated(dimension,nbins): _* ), template.invalid )
+  private def getBinsArray( template: CDFloatArray  ): CDFloatArray = {
+    val shape: Array[Int] = template.getShape.updated(dimension,nbins)
+    new CDFloatArray( shape, Array.fill[Float](shape.product)(0) )
+  }
   private def initValues( template: CDFloatArray ):  Unit = { if( _values.isEmpty ) _values = Some( getBinsArray( template ) ) }
   private def initCounter( template: CDFloatArray ): Unit = { if( _counts.isEmpty ) _counts = Some( getBinsArray( template ) ) }
   private def accumulator( template: CDFloatArray ): CDFloatArray = { initValues(template); _values.get }
   private def binCounts( template: CDFloatArray ):   CDFloatArray =  { initCounter(template); _counts.get }
 
-  def insert( binIndex: Int, values: CDFloatArray ): Unit =
-    accumulator(values).slice( binIndices(binIndex), dimension ) :++= ( values, binCounts(values).slice( binIndices(binIndex), dimension ) )
+  def insert( binIndex: Int, values: CDFloatArray ): Unit = {
+    val accum: CDFloatArray = accumulator(values).slice(binIndices(binIndex), dimension)
+    accum ++= (values, binCounts(values).slice(binIndices(binIndex), dimension))
+  }
 
   def result( result_index: Int = 0 ): Option[CDFloatArray] = result_index match {
     case 0 => _values match {
       case None => None;
-      case Some( values ) => Some(values :/ _counts.get) };
+      case Some( values ) => Some(values / _counts.get) };
     case x => None
   }
 }

@@ -37,7 +37,7 @@ trait ExecutionResult {
 class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val gridSpec: GridSpec, val result_tensor: CDFloatArray ) extends ExecutionResult {
   def toXml = {
     val idToks = id.split('~')
-    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.invalid.toString}> {result_tensor.data.mkString(",")}  </data>  </result>
+    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.invalid.toString}> {result_tensor.getData.mkString(",")}  </data>  </result>
   }
 }
 
@@ -73,23 +73,6 @@ case class ResultManifest( val name: String, val dataset: String, val descriptio
 //      { super.toXml }
 //    </operation>
 //}
-
-abstract class DataFragment( private val array: CDFloatArray )  extends Serializable {
-  val metaData = new mutable.HashMap[String, String]
-
-  def this( array: CDFloatArray, metaDataVar: (String, String)* ) {
-    this( array )
-    metaDataVar.map(p => metaData += p)
-  }
-  def data: CDFloatArray = array
-  def name = array.name
-  def shape: List[Int] = array.getShape.toList
-
-  def sampleDataString( nsamples: Int = 20, step: Int = 20 ) = {
-    (0 to step*nsamples by step).map( array.sampleValue(_) ).mkString("[ ", ", ", " ]")
-  }
-  def getValue( indices: Array[Int] ): Float = array.getValue( indices )
-}
 
 
 class AxisIndices( private val axisIds: Set[Int] = Set.empty ) {
@@ -185,7 +168,7 @@ abstract class Kernel {
         dsetMetadata.foreach( attr => writer.addGroupAttribute(null, attr ) )
         try {
           writer.create()
-          writer.write( variable, maskedTensor.ma2Data )
+          writer.write( variable, maskedTensor )
 //          for( dim <- dims ) {
 //            val dimvar: nc2.Variable = writer.addVariable(null, dim.getFullName, ma2.DataType.FLOAT, List(dim) )
 //            writer.write( dimvar, dimdata )

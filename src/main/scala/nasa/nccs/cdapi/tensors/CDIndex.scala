@@ -42,14 +42,7 @@ abstract class CDIterator( index: CDIndex  ) extends collection.Iterator[Int] {
   def getIndex: Int
   def initialize: Unit
 
-  protected def currentElement: Int = {
-    var value: Int = offset
-    for( ii <-(0 until rank ); if (shape(ii) >= 0) ) {
-      value += coordIndices(ii) * stride(ii)
-    }
-    value
-  }
-
+  protected def currentElement: Int = cdIndex.getFlatIndex( coordIndices )
   protected def getCoordIndices: Array[Int] = coordIndices.clone
 
   protected def setCurrentCounter( _currElement: Int ) {
@@ -214,6 +207,24 @@ class CDIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyI
     false
   }
 
+  def getCoordIndices( flatIndex: Int ): IndexedSeq[Int] = {
+    var currElement = flatIndex
+    currElement -= offset
+    for( ii <-(0 until rank ) ) yield if (shape(ii) < 0) {  -1 } else {
+      val coordIndex = currElement / stride(ii)
+      currElement -= coordIndex * stride(ii)
+      coordIndex
+    }
+  }
+
+  def getFlatIndex( coordIndices: Array[Int] ): Int = {
+    var value: Int = offset
+    for( ii <-(0 until rank ); if (shape(ii) >= 0) ) {
+      value += coordIndices(ii) * stride(ii)
+    }
+    value
+  }
+
   def computeStrides( shape: Array[Int] ): Array[Int] = {
     var product: Int = 1
     var strides = for (ii <- (shape.length - 1 to 0 by -1); thisDim = shape(ii) ) yield
@@ -336,7 +347,7 @@ class CDIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyI
     return shape(index)
   }
 
-  def getSize: Long = shape.filter( _ > 0 ).product
+  def getSize: Int = shape.filter( _ > 0 ).product
 
   def getOffset: Int = offset
 
