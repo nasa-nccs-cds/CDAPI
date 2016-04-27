@@ -49,14 +49,6 @@ case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {}
 class ServerContext( val dataLoader: DataLoader, private val configuration: Map[String,String] )  extends ScopeContext {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   def getConfiguration = configuration
-
-  def getBinnedArrayFactory(operationCx: OperationContext, requestCx: RequestContext): Option[BinnedArrayFactory] = {
-    val uid = operationCx.inputs.head
-    operationCx.config("bins") match {
-      case None => None
-      case Some(binSpec) => Option(BinnedArrayFactory(binSpec, getVariable( requestCx.getInputSpec(uid).data ) ) )
-    }
-  }
   def inputs( inputSpecs: List[OperationInputSpec] ): List[KernelDataInput] = for( inputSpec <- inputSpecs ) yield new KernelDataInput( getVariableData(inputSpec.data), inputSpec.axes )
   def getVariable(fragSpec: DataFragmentSpec ): CDSVariable = dataLoader.getVariable( fragSpec.collection, fragSpec.varname )
   def getVariable(collection: String, varname: String ): CDSVariable = dataLoader.getVariable( collection, varname )

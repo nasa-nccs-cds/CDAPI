@@ -1,10 +1,8 @@
+// Based on ucar.ma2.Array, portions of which were developed by the Unidata Program at the University Corporation for Atmospheric Research.
+
 package nasa.nccs.cdapi.tensors
 import java.nio._
-
 import ucar.ma2
-
-import scala.collection.GenTraversableOnce
-
 
 object CDArray {
 
@@ -50,6 +48,7 @@ abstract class CDArray[ T <: AnyVal ]( private val indexCalc: CDIndex, private v
   def getIterator: CDIterator = return if(isStorageCongruent) new CDStorageIndexIterator( indexCalc ) else CDIterator.factory( indexCalc )
   def getRank: Int = rank
   def getShape: Array[Int] = indexCalc.getShape
+  def getReducedShape: Array[Int] = indexCalc.getReducedShape
   def getFlatValue( index: Int ): T = storage(index)
   def getValue( indices: Array[Int] ): T = storage( indexCalc.getFlatIndex(indices) )
   def setFlatValue( index: Int, value: T ): Unit = { storage(index) = value }
@@ -59,10 +58,37 @@ abstract class CDArray[ T <: AnyVal ]( private val indexCalc: CDIndex, private v
   def getRangeIterator(ranges: List[ma2.Range] ): CDIterator = section(ranges).getIterator
   def getStorage: Array[T] = storage
   def map[B<: AnyVal](f:(T)=>B): CDArray[B] = CDArray.factory[B]( indexCalc, storage.map(f).asInstanceOf[Array[B]] )
-  def flatMap[B<: AnyVal](f:(T)=>GenTraversableOnce[B]): CDArray[B] = CDArray.factory[B]( indexCalc, storage.flatMap(f).asInstanceOf[Array[B]] )
+//  def flatMap[B<: AnyVal](f:(T)=>GenTraversableOnce[B]): CDArray[B] = CDArray.factory[B]( indexCalc, storage.flatMap(f).asInstanceOf[Array[B]] )
   def copySectionData: Array[T]
   def getSectionData: Array[T] = if( isStorageCongruent ) getStorage else copySectionData
   def section(ranges: List[ma2.Range]): CDArray[T] = createView(indexCalc.section(ranges))
+  def valid( value: T ): Boolean
+  def spawn( shape: Array[Int], fillval: T ): CDArray[T]
+
+  def getAccumulatorArray( reduceAxes: Array[Int], fillval: T, fullShape: Array[Int] = getShape ): CDArray[T] = {
+    val reducedShape = for( idim <- ( 0 to rank) ) yield if( reduceAxes.contains(idim) ) 1 else fullShape( idim )
+    val accumulator = spawn( reducedShape.toArray, fillval )
+    accumulator.broadcast( fullShape )
+  }
+
+  def getReducedArray(): CDArray[T] = { CDArray.factory[T]( getReducedShape, storage ) }
+
+  def reduce( reductionOp: (T,T)=>T, reduceDims: Array[Int], initVal: T, coordMapOpt: Option[CDCoordMap] = None ): CDArray[T] = {
+    val fullShape = coordMapOpt match { case Some(coordMap) => coordMap.mapShape( getShape ); case None => getShape }
+    val accumulator: CDArray[T] = getAccumulatorArray( reduceDims, initVal, fullShape )
+    val iter = accumulator.getIterator
+    coordMapOpt match {
+      case Some(coordMap) =>
+        for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) {
+          val mappedCoords = coordMap.map(coordIndices)
+          accumulator.setValue(mappedCoords, reductionOp(accumulator.getValue(mappedCoords), array_value))
+        }
+      case None =>
+        for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices)
+          accumulator.setValue(coordIndices, reductionOp(accumulator.getValue(coordIndices), array_value))
+    }
+    accumulator.getReducedArray
+  }
 
   def createRanges( origin: Array[Int], shape: Array[Int], strideOpt: Option[Array[Int]] = None ): List[ma2.Range] = {
     val strides: Array[Int] = strideOpt match {
@@ -145,49 +171,29 @@ object CDFloatArray {
     new CDFloatArray(new CDIndex(array.getShape), storage)
   }
 
-  def combine( op: TensorCombinerOp, input0: CDFloatArray, input1: CDFloatArray ): CDFloatArray = {
+  def combine( reductionOp: (Float,Float)=>Float, input0: CDFloatArray, input1: CDFloatArray ): CDFloatArray = {
     assert( input0.getShape == input1.getShape, "Can't combine arrays with different shapes")
     val iter = input0.getIterator
-    val result = for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); v1 = input1.getFlatValue(flatIndex) ) yield op.combine(v0,v1)
+    val result = for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); v1 = input1.getFlatValue(flatIndex) ) yield
+      if( !input0.valid( v0 ) ) input0.invalid
+      else if ( !input1.valid( v1 ) ) input0.invalid
+      else reductionOp(v0,v1)
     new CDFloatArray( input0.getShape, result.toArray, input0.invalid )
   }
 
-  def icombine( op: TensorCombinerOp, input0: CDFloatArray, input1: CDFloatArray ): Unit = {
+  def accumulate( reductionOp: (Float,Float)=>Float, input0: CDFloatArray, input1: CDFloatArray ): Unit = {
     assert( input0.getShape == input1.getShape, "Can't combine arrays with different shapes")
     val iter = input0.getIterator
-    for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); v1 = input1.getFlatValue(flatIndex) ) input0.setFlatValue( flatIndex,  op.combine(v0,v1) )
+    for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); if(input0.valid(v0)); v1 = input1.getFlatValue(flatIndex); if(input1.valid(v1)) )
+      input0.setFlatValue( flatIndex,  reductionOp(v0,v1) )
   }
 
-  def combine( op: TensorCombinerOp, input0: CDFloatArray, fval: Float ): CDFloatArray = {
+  def combine( reductionOp: (Float,Float)=>Float, input0: CDFloatArray, fval: Float ): CDFloatArray = {
     val iter = input0.getIterator
-    val result = for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex) ) yield op.combine(v0,fval)
+    val result = for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex) ) yield
+      if( !input0.valid( v0 ) ) input0.invalid
+      else reductionOp(v0,fval)
     new CDFloatArray( input0.getShape, result.toArray, input0.invalid )
-  }
-
-  def icombine( op: TensorCombinerOp, input0: CDFloatArray, fval: Float ): Unit = {
-    val iter = input0.getIterator
-    val result = for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex) ) input0.setFlatValue( flatIndex, op.combine(v0,fval) )
-  }
-
-  def icombine( op: TensorCombinerOp, input0: CDFloatArray, input1: CDFloatArray, countArray: CDFloatArray ): Unit = {
-    val iter = input0.getIterator
-    for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); if input0.valid(v0); v1 = input1.getFlatValue(flatIndex); if input1.valid(v0) )  {
-       input0.setFlatValue(flatIndex, op.combine( v0, v1) )
-       countArray.setFlatValue( flatIndex, countArray.getFlatValue( flatIndex ) + 1 )
-    }
-  }
-
-  def accumulate( op: TensorAccumulatorOp, input0: CDFloatArray, input1: CDFloatArray ): Array[Float] = {
-    assert( input0.getShape == input1.getShape, "Can't combine arrays with different shapes")
-    val iter = input0.getIterator
-    for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); if input0.valid(v0); v1 = input1.getFlatValue(flatIndex) ) op.insert(v0,v1)
-    op.getResult
-  }
-
-  def accumulate( op: TensorAccumulatorOp, input0: CDFloatArray, fval: Float ): Array[Float] = {
-    val iter = input0.getIterator
-    for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); if input0.valid(v0) ) op.insert(v0,fval)
-    op.getResult
   }
 
 }
@@ -210,28 +216,62 @@ class CDFloatArray( indexCalc: CDIndex, storage: Array[Float], val invalid: Floa
     val array_data_iter = for ( index <- iter; value = getData(index) ) yield { value }
     array_data_iter.toArray
   }
+
+  def spawn( shape: Array[Int], fillval: Float ): CDArray[Float] = CDArray.factory( shape, Array.fill[Float]( shape.product )(fillval)  )
   def zeros: CDFloatArray = new CDFloatArray( getShape, Array.fill[Float]( getSize )(0), invalid )
   def invalids: CDFloatArray = new CDFloatArray( getShape, Array.fill[Float]( getSize )(invalid), invalid )
 
-  def -(array: CDFloatArray) = CDFloatArray.combine( subOp(invalid), this, array )
-  def -=(array: CDFloatArray) = CDFloatArray.icombine( subOp(invalid), this, array )
-  def +(array: CDFloatArray) = CDFloatArray.combine( addOp(invalid), this, array )
-  def +=(array: CDFloatArray) = CDFloatArray.icombine( addOp(invalid), this, array )
-  def /(array: CDFloatArray) = CDFloatArray.combine( divOp(invalid), this, array )
-  def *(array: CDFloatArray) = CDFloatArray.combine( multOp(invalid), this, array )
-  def /=(array: CDFloatArray) = CDFloatArray.icombine( divOp(invalid), this, array )
-  def *=(array: CDFloatArray) = CDFloatArray.icombine( multOp(invalid), this, array )
-  def -(value: Float) = CDFloatArray.combine( subOp(invalid), this, value )
-  def +(value: Float) = CDFloatArray.combine( addOp(invalid), this, value )
-  def -=(value: Float) = CDFloatArray.icombine( subOp(invalid), this, value )
-  def +=(value: Float) = CDFloatArray.icombine( addOp(invalid), this, value )
-  def /(value: Float) = CDFloatArray.combine( divOp(invalid), this, value )
-  def *(value: Float) = CDFloatArray.combine( multOp(invalid), this, value )
-  def /=(value: Float) = CDFloatArray.icombine( divOp(invalid), this, value )
-  def *=(value: Float) = CDFloatArray.icombine( multOp(invalid), this, value )
-  def ++=(values: CDFloatArray, counts: CDFloatArray) = CDFloatArray.icombine( addOp(invalid), this, values, counts )
+  def -(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x - y ), this, array )
+  def -=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x - y ), this, array )
+  def +(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x + y ), this, array )
+  def +=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x + y ), this, array )
+  def /(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x / y ), this, array )
+  def *(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x * y ), this, array )
+  def /=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x / y ), this, array )
+  def *=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x * y ), this, array )
+  def -(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x - y ), this, value )
+  def +(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x + y ), this, value )
+  def /(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x / y ), this, value )
+  def *(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x * y ), this, value )
 
-  def mean( weightsOpt: Option[CDFloatArray], dimensions: Int* ): CDFloatArray = execAccumulatorOp( new meanOp(invalid), weightsOpt, dimensions:_* )
+  def max(reduceDims: Array[Int]): CDFloatArray = reduce( (x:Float, y:Float) => ( if( x > y ) x else y ), reduceDims, Float.MinValue )
+  def min(reduceDims: Array[Int]): CDFloatArray = reduce( (x:Float, y:Float) => ( if( x < y ) x else y ), reduceDims, Float.MaxValue )
+  def sum(reduceDims: Array[Int]): CDFloatArray = reduce( (x:Float, y:Float) => ( x + y ), reduceDims, 0f )
+
+  def mean(reduceDims: Array[Int], weightsOpt: Option[CDFloatArray] = None): CDFloatArray = {
+    if (weightsOpt.isDefined) assert( getShape == weightsOpt.get.getShape, " Weight array in mean op has wrong shape: (%s) vs. (%s)".format( weightsOpt.get.getShape.mkString(","), getShape.mkString(",") ))
+    val values_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f)
+    val weights_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f)
+    val iter = getIterator
+    for (cdIndex <- iter; array_value = getData(cdIndex); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
+      case Some(weights) =>
+        val weight = weights.getValue(coordIndices);
+        values_accumulator.setValue(coordIndices, values_accumulator.getValue(coordIndices) + array_value * weight)
+        weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + weight)
+      case None =>
+        values_accumulator.setValue(coordIndices, values_accumulator.getValue(coordIndices) + array_value)
+        weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + 1f)
+    }
+    values_accumulator / weights_accumulator
+  }
+
+  def anomaly( reduceDims: Array[Int], weightsOpt: Option[CDFloatArray] = None ): CDFloatArray = {
+    val meanval = mean( reduceDims, weightsOpt )
+    this - meanval
+  }
+
+
+//  def execAccumulatorOp(op: TensorAccumulatorOp, auxDataOpt: Option[CDFloatArray], dimensions: Int*): CDFloatArray = {
+//    assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
+//    val filtered_shape: IndexedSeq[Int] = (0 until rank).map(x => if (dimensions.contains(x)) 1 else getShape(x))
+//    val slices = auxDataOpt match {
+//      case Some(auxData) => Nd4j.concat(0, (0 until filtered_shape.product).map(iS => { Nd4j.create(subset(iS, dimensions: _*).accumulate2( op, auxData.subset( iS, dimensions: _*).tensor )) }): _*)
+//      case None =>  Nd4j.concat(0, (0 until filtered_shape.product).map(iS => Nd4j.create(subset(iS, dimensions: _*).accumulate(op))): _*)
+//    }
+//    new CDFloatArray( slices.reshape(filtered_shape: _* ), invalid )
+//  }
+
+//  def mean( weightsOpt: Option[CDFloatArray], dimensions: Int* ): CDFloatArray = execAccumulatorOp( new meanOp(invalid), weightsOpt, dimensions:_* )
 
   def computeWeights( weighting_type: String, axisDataMap: Map[ Char, ( Int, ma2.Array ) ] ) : CDFloatArray  = {
     weighting_type match {
@@ -259,7 +299,10 @@ class CDByteArray( indexCalc: CDIndex, storage: Array[Byte] ) extends CDArray[By
 
   def this( shape: Array[Int], storage: Array[Byte] ) = this( CDIndex.factory(shape), storage )
 
+  def valid( value: Byte ): Boolean = true
+
   override def dup(): CDByteArray = new CDByteArray( indexCalc.getShape, this.getSectionData )
+  def spawn( shape: Array[Int], fillval: Byte ): CDArray[Byte] = CDArray.factory( shape, Array.fill[Byte]( shape.product )(fillval)  )
 
   def copySectionData: Array[Byte] = {
     val iter = getIterator
@@ -273,8 +316,10 @@ class CDIntArray( indexCalc: CDIndex, storage: Array[Int] ) extends CDArray[Int]
   def getData: Array[Int] = storage.asInstanceOf[Array[Int]]
 
   def this( shape: Array[Int], storage: Array[Int] ) = this( CDIndex.factory(shape), storage )
+  def valid( value: Int ): Boolean = true
 
   override def dup(): CDIntArray = new CDIntArray( indexCalc.getShape, this.getSectionData )
+  def spawn( shape: Array[Int], fillval: Int ): CDArray[Int] = CDArray.factory( shape, Array.fill[Int]( shape.product )(fillval)  )
 
   def copySectionData: Array[Int] = {
     val iter = getIterator
@@ -288,8 +333,10 @@ class CDShortArray( indexCalc: CDIndex, storage: Array[Short] ) extends CDArray[
   def getData: Array[Short] = storage.asInstanceOf[Array[Short]]
 
   def this( shape: Array[Int], storage: Array[Short] ) = this( CDIndex.factory(shape), storage )
+  def valid( value: Short ): Boolean = true
 
   override def dup(): CDShortArray = new CDShortArray( indexCalc.getShape, this.getSectionData )
+  def spawn( shape: Array[Int], fillval: Short ): CDArray[Short] = CDArray.factory( shape, Array.fill[Short]( shape.product )(fillval)  )
 
   def copySectionData: Array[Short] = {
     val iter = getIterator
@@ -313,6 +360,7 @@ class CDDoubleArray( indexCalc: CDIndex, storage: Array[Double], val invalid: Do
   def valid( value: Double ) = ( value != invalid )
 
   override def dup(): CDDoubleArray = new CDDoubleArray( indexCalc.getShape, this.getSectionData )
+  def spawn( shape: Array[Int], fillval: Double ): CDArray[Double] = CDArray.factory( shape, Array.fill[Double]( shape.product )(fillval)  )
 
   def copySectionData: Array[Double] = {
     val iter = getIterator
