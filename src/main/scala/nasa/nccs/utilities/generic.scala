@@ -30,6 +30,15 @@ object cdsutils {
     for ( cpitem <- cpitems; fileitem = new File(cpitem); if fileitem.isFile && fileitem.getName.toLowerCase.endsWith(".jar") ) yield new JarFile(fileitem)
   }
 
+  def ptime[R]( label: String)(block: => R): R = {
+    val t0 = System.nanoTime()
+    val result = block
+    val t1 = System.nanoTime()
+    println( "%s: Time = %.4f s".format( label, (t1-t0)/1.0E9 ))
+    result
+  }
+
+
   def time[R](logger:Logger, label: String)(block: => R): R = {
     val t0 = System.nanoTime()
     val result = block

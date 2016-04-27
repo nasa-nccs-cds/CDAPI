@@ -2,6 +2,8 @@
 
 package nasa.nccs.cdapi.tensors
 import java.nio._
+
+import nasa.nccs.utilities.cdsutils
 import ucar.ma2
 
 object CDArray {
@@ -135,9 +137,9 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndex: CDCoordIndex, privat
   protected def createView( cdIndex: CDCoordIndex ): CDArray[T] = CDArray.factory(cdIndex, storage)
 
   def getDataAsByteBuffer: ByteBuffer = {
-    val bb: ByteBuffer = ByteBuffer.allocate( ( dataType.getSize * getSize ).asInstanceOf[Int] )
+    val bb: ByteBuffer = cdsutils.ptime(  "getDataAsByteBuffer.allocate" ) { ByteBuffer.allocate( ( dataType.getSize * getSize ).asInstanceOf[Int] ) }
     dataType match {
-      case ma2.DataType.FLOAT => bb.asFloatBuffer.put( getSectionData.asInstanceOf[Array[Float]] )
+      case ma2.DataType.FLOAT => bb.asFloatBuffer.put( getSectionData.asInstanceOf[Array[Float]]  )
       case ma2.DataType.INT => bb.asIntBuffer.put( getSectionData.asInstanceOf[Array[Int]] )
       case ma2.DataType.BYTE => bb.put( getSectionData.asInstanceOf[Array[Byte]] )
       case ma2.DataType.SHORT => bb.asShortBuffer.put( getSectionData.asInstanceOf[Array[Short]] )
@@ -180,8 +182,7 @@ object CDFloatArray {
 
   def combine( reductionOp: (Float,Float)=>Float, input0: CDFloatArray, input1: CDFloatArray ): CDFloatArray = {
     assert( input0.getShape.sameElements(input1.getShape), "Can't combine arrays with different shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",")))
-    val iter = input0.getIterator
-    val result = for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); v1 = input1.getFlatValue(flatIndex) ) yield
+    val result = for( flatIndex <- input0.getIterator; v0 = input0.getFlatValue(flatIndex); v1 = input1.getFlatValue(flatIndex) ) yield
       if( !input0.valid( v0 ) ) input0.invalid
       else if ( !input1.valid( v1 ) ) input0.invalid
       else reductionOp(v0,v1)
@@ -190,14 +191,12 @@ object CDFloatArray {
 
   def accumulate( reductionOp: (Float,Float)=>Float, input0: CDFloatArray, input1: CDFloatArray ): Unit = {
     assert( input0.getShape.sameElements(input1.getShape), "Can't combine arrays with different shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",")))
-    val iter = input0.getIterator
-    for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); if(input0.valid(v0)); v1 = input1.getFlatValue(flatIndex); if(input1.valid(v1)) )
+    for( flatIndex <- input0.getIterator; v0 = input0.getFlatValue(flatIndex); if(input0.valid(v0)); v1 = input1.getFlatValue(flatIndex); if(input1.valid(v1)) )
       input0.setFlatValue( flatIndex,  reductionOp(v0,v1) )
   }
 
   def combine( reductionOp: (Float,Float)=>Float, input0: CDFloatArray, fval: Float ): CDFloatArray = {
-    val iter = input0.getIterator
-    val result = for( flatIndex <- iter; v0 = input0.getFlatValue(flatIndex) ) yield
+    val result = for( flatIndex <- input0.getIterator; v0 = input0.getFlatValue(flatIndex) ) yield
       if( !input0.valid( v0 ) ) input0.invalid
       else reductionOp(v0,fval)
     new CDFloatArray( input0.getShape, result.toArray, input0.invalid )
@@ -209,21 +208,11 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], val invalid: F
 
   def this( shape: Array[Int], storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory(shape), storage, invalid )
   def this( shape: Array[Int], storage: Array[Float] ) = this( CDCoordIndex.factory(shape), storage )
-
   def getData: Array[Float] = storage.asInstanceOf[Array[Float]]
-
   override def dup(): CDFloatArray = new CDFloatArray( cdIndex.getShape, this.getSectionData )
-
   def valid( value: Float ) = ( value != invalid )
-
   def toCDFloatArray( target: CDArray[Float] ) = new CDFloatArray( target.getIndex, target.getStorage, invalid )
-
-  def copySectionData: Array[Float] = {
-    val iter = getIterator
-    val array_data_iter = for ( index <- iter; value = getData(index) ) yield { value }
-    array_data_iter.toArray
-  }
-
+  def copySectionData: Array[Float] =  ( for ( index <- getIterator; value = getData(index) ) yield { value } ).toArray
   def spawn( shape: Array[Int], fillval: Float ): CDArray[Float] = CDArray.factory( shape, Array.fill[Float]( shape.product )(fillval)  )
   def zeros: CDFloatArray = new CDFloatArray( getShape, Array.fill[Float]( getSize )(0), invalid )
   def invalids: CDFloatArray = new CDFloatArray( getShape, Array.fill[Float]( getSize )(invalid), invalid )
@@ -315,8 +304,7 @@ class CDByteArray( cdIndex: CDCoordIndex, storage: Array[Byte] ) extends CDArray
   def spawn( shape: Array[Int], fillval: Byte ): CDArray[Byte] = CDArray.factory( shape, Array.fill[Byte]( shape.product )(fillval)  )
 
   def copySectionData: Array[Byte] = {
-    val iter = getIterator
-    val array_data_iter = for (index <- iter; value = getData(index)) yield value
+    val array_data_iter = for (index <- getIterator; value = getData(index)) yield value
     array_data_iter.toArray
   }
 }
@@ -332,8 +320,7 @@ class CDIntArray( cdIndex: CDCoordIndex, storage: Array[Int] ) extends CDArray[I
   def spawn( shape: Array[Int], fillval: Int ): CDArray[Int] = CDArray.factory( shape, Array.fill[Int]( shape.product )(fillval)  )
 
   def copySectionData: Array[Int] = {
-    val iter = getIterator
-    val array_data_iter = for ( index <- iter; value = getData(index) ) yield value
+    val array_data_iter = for ( index <- getIterator; value = getData(index) ) yield value
     array_data_iter.toArray
   }
 }
@@ -349,8 +336,7 @@ class CDShortArray( cdIndex: CDCoordIndex, storage: Array[Short] ) extends CDArr
   def spawn( shape: Array[Int], fillval: Short ): CDArray[Short] = CDArray.factory( shape, Array.fill[Short]( shape.product )(fillval)  )
 
   def copySectionData: Array[Short] = {
-    val iter = getIterator
-    val array_data_iter = for ( index <- iter; value = getData(index) ) yield value
+    val array_data_iter = for ( index <- getIterator; value = getData(index) ) yield value
     array_data_iter.toArray
   }
 }
@@ -373,8 +359,7 @@ class CDDoubleArray( cdIndex: CDCoordIndex, storage: Array[Double], val invalid:
   def spawn( shape: Array[Int], fillval: Double ): CDArray[Double] = CDArray.factory( shape, Array.fill[Double]( shape.product )(fillval)  )
 
   def copySectionData: Array[Double] = {
-    val iter = getIterator
-    val array_data_iter = for ( index <- iter; value = getData(index) ) yield value
+    val array_data_iter = for ( index <- getIterator; value = getData(index) ) yield value
     array_data_iter.toArray
   }
 
@@ -423,8 +408,6 @@ object ArrayPerformanceTest extends App {
   val cdIndex: CDCoordIndex = CDCoordIndex.factory( base_shape )
   val cd_array = new CDFloatArray( cdIndex, storage )
   val ma2_array: ma2.Array = ma2.Array.factory( ma2.DataType.FLOAT, base_shape, storage )
-
-  val cdIter = cd_array.getIterator
   val ma2Iter: ma2.IndexIterator = ma2_array.getIndexIterator
 
   val itest = 1
@@ -432,7 +415,9 @@ object ArrayPerformanceTest extends App {
   itest match {
     case 0 =>
       val t00 = System.nanoTime
-      val cdResult = for (index <- cdIter; value = cd_array.getData (index) ) yield { value * value }
+      val cdResult = for (index <- cd_array.getIterator; value = cd_array.getData (index) ) yield {
+        value * value
+      }
       val cdResultData = cdResult.toArray
       val t01 = System.nanoTime
       println ("cd2Result Time = %.4f,  ".format ((t01 - t00) / 1.0E9) )
@@ -449,16 +434,19 @@ object ArrayPerformanceTest extends App {
       val section_shape = Array( 80, 80, 8 )
       val section_strides = Array( 1, 1, 1 )
 
-      val t00 = System.nanoTime
+
       val cdResult = cd_array.section( section_origin, section_shape )
+      val t00 = System.nanoTime
       val cdData = cdResult.getDataAsByteBuffer
       val t01 = System.nanoTime
+
       println ("cd2Result Time = %.4f,  ".format ((t01 - t00) / 1.0E9) )
 
-      val t10 = System.nanoTime
       val ma2Result = ma2_array.section( section_origin, section_shape )
+       val t10 = System.nanoTime
       val ma2Data = ma2Result.getDataAsByteBuffer
       val t11 = System.nanoTime
+
       println ("ma2Result Time = %.4f,  ".format ((t11 - t10) / 1.0E9) )
   }
 
