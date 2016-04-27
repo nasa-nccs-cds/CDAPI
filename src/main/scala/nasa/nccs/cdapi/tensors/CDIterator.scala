@@ -4,24 +4,24 @@ package nasa.nccs.cdapi.tensors
 
 object CDIterator {
 
-  def factory( index: CDIndex ): CDArrayIndexIterator = index.getRank match {
+  def factory( cdIndex: CDCoordIndex ): CDArrayIndexIterator = cdIndex.getRank match {
     case 1 =>
-      return new CDIndexIterator1D(index)
+      return new CDIndexIterator1D(cdIndex)
     case 2 =>
-      return new CDIndexIterator2D(index)
+      return new CDIndexIterator2D(cdIndex)
     case 3 =>
-      return new CDIndexIterator3D(index)
+      return new CDIndexIterator3D(cdIndex)
     case 4 =>
-      return new CDIndexIterator4D(index)
+      return new CDIndexIterator4D(cdIndex)
     case 5 =>
-      return new CDIndexIterator5D(index)
+      return new CDIndexIterator5D(cdIndex)
     case _ =>
-      return new CDArrayIndexIterator(index)
+      return new CDArrayIndexIterator(cdIndex)
   }
 }
 
-abstract class CDIterator( index: CDIndex  ) extends collection.Iterator[Int] {
-  protected val cdIndex: CDIndex = CDIndex.factory( index )
+abstract class CDIterator( _cdIndex: CDCoordIndex  ) extends collection.Iterator[Int] {
+  protected val cdIndex: CDCoordIndex = CDCoordIndex.factory( _cdIndex )
   protected val rank = cdIndex.getRank
   protected val stride = cdIndex.getStride
   protected val shape = cdIndex.getShape
@@ -147,7 +147,7 @@ abstract class CDIterator( index: CDIndex  ) extends collection.Iterator[Int] {
   }
 }
 
-class CDArrayIndexIterator( index: CDIndex  ) extends CDIterator(index) {
+class CDArrayIndexIterator( cdIndex: CDCoordIndex  ) extends CDIterator(cdIndex) {
   private var count: Int = 0
   private var currElement: Int = currentElement
   private var numElem = cdIndex.getSize
@@ -163,7 +163,7 @@ class CDArrayIndexIterator( index: CDIndex  ) extends CDIterator(index) {
   def initialize: Unit = {}
 }
 
-class CDStorageIndexIterator( index: CDIndex  ) extends CDIterator(index) {
+class CDStorageIndexIterator( cdIndex: CDCoordIndex  ) extends CDIterator(cdIndex) {
   private var count: Int = -1
   private var countBound = cdIndex.getSize - 1
 
@@ -178,7 +178,7 @@ class CDStorageIndexIterator( index: CDIndex  ) extends CDIterator(index) {
 }
 
 
-class CDIndexIterator1D( index: CDIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator1D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( cdIndex  ) {
   private var curr0: Int = coordIndices(0)
   private var stride0: Int = stride(0)
   private var shape0: Int = shape(0)
@@ -219,9 +219,9 @@ class CDIndexIterator1D( index: CDIndex ) extends  CDArrayIndexIterator( index  
     this
   }
 
-  override def setCoordIndices(index: Array[Int]): CDIndexIterator1D = {
-    if (index.length != rank) throw new Exception()
-    set0(index(0))
+  override def setCoordIndices(cdIndex: Array[Int]): CDIndexIterator1D = {
+    if (cdIndex.length != rank) throw new Exception()
+    set0(cdIndex(0))
     this
   }
 
@@ -231,7 +231,7 @@ class CDIndexIterator1D( index: CDIndex ) extends  CDArrayIndexIterator( index  
   }
 }
 
-class CDIndexIterator2D( index: CDIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator2D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( cdIndex  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var stride0: Int = stride(0)
@@ -279,10 +279,10 @@ class CDIndexIterator2D( index: CDIndex ) extends  CDArrayIndexIterator( index  
     else curr0 = value
   }
 
-  override def setCoordIndices(index: Array[Int]): CDIndexIterator2D = {
-    if (index.length != rank) throw new Exception()
-    set0(index(0))
-    set1(index(1))
+  override def setCoordIndices( coordIndices: Array[Int]): CDIndexIterator2D = {
+    if (coordIndices.length != rank) throw new Exception()
+    set0(coordIndices(0))
+    set1(coordIndices(1))
     this
   }
 
@@ -313,7 +313,7 @@ class CDIndexIterator2D( index: CDIndex ) extends  CDArrayIndexIterator( index  
 }
 
 
-class CDIndexIterator3D( index: CDIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator3D( index: CDCoordIndex ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -413,7 +413,7 @@ class CDIndexIterator3D( index: CDIndex ) extends  CDArrayIndexIterator( index  
   }
 }
 
-class CDIndexIterator4D( index: CDIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator4D( index: CDCoordIndex ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -541,7 +541,7 @@ class CDIndexIterator4D( index: CDIndex ) extends  CDArrayIndexIterator( index  
 }
 
 
-class CDIndexIterator5D( index: CDIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator5D( index: CDCoordIndex ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
