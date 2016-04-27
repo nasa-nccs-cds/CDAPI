@@ -19,8 +19,6 @@ resolvers += "Boundless Maven Repository" at "http://repo.boundlessgeo.com/main"
 
 libraryDependencies ++= Dependencies.scala
 
-libraryDependencies ++= Dependencies.ndarray
-
 libraryDependencies ++= Dependencies.geo
 
 // libraryDependencies ++= Dependencies.netcdf

@@ -6,7 +6,6 @@ import nasa.nccs.cdapi.kernels.AxisIndices
 import nasa.nccs.cdapi.tensors.{ CDArray, CDFloatArray }
 import nasa.nccs.esgf.utilities.numbers.GenericNumber
 import nasa.nccs.utilities.cdsutils
-import org.nd4j.linalg.indexing.{INDArrayIndex, NDArrayIndex}
 import ucar.nc2.time.{CalendarDate, CalendarDateRange}
 import nasa.nccs.esgf.process._
 import ucar.{ma2, nc2, unidata}
