@@ -40,6 +40,7 @@ object CDArray {
 }
 
 abstract class CDArray[ T <: AnyVal ]( private val cdIndex: CDCoordIndex, private val storage: Array[T] )  {
+  type ReduceOp = (T,T)=>T
   protected val rank = cdIndex.getRank
   protected val dataType = CDArray.getDataType(storage)
 
@@ -90,6 +91,7 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndex: CDCoordIndex, privat
     }
     accumulator.getReducedArray
   }
+
 
   def createRanges( origin: Array[Int], shape: Array[Int], strideOpt: Option[Array[Int]] = None ): List[ma2.Range] = {
     val strides: Array[Int] = strideOpt match {
@@ -205,6 +207,12 @@ object CDFloatArray {
 }
 
 class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], val invalid: Float = Float.MaxValue ) extends CDArray[Float](cdIndex,storage) {
+  val addOp: ReduceOp = (x:Float, y:Float) => ( x + y )
+  val subtractOp: ReduceOp = (x:Float, y:Float) => ( x - y )
+  val multiplyOp: ReduceOp = (x:Float, y:Float) => ( x * y )
+  val devideOp: ReduceOp = (x:Float, y:Float) => ( x / y )
+  val maxOp: ReduceOp = (x:Float, y:Float) => ( if( x > y ) x else y )
+  val minOp: ReduceOp = (x:Float, y:Float) => ( if( x < y ) x else y )
 
   def this( shape: Array[Int], storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory(shape), storage, invalid )
   def this( shape: Array[Int], storage: Array[Float] ) = this( CDCoordIndex.factory(shape), storage )
@@ -218,40 +226,60 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], val invalid: F
   def invalids: CDFloatArray = new CDFloatArray( getShape, Array.fill[Float]( getSize )(invalid), invalid )
 
 
-  def -(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x - y ), this, array )
-  def -=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x - y ), this, array )
-  def +(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x + y ), this, array )
-  def +=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x + y ), this, array )
-  def /(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x / y ), this, array )
-  def *(array: CDFloatArray) = CDFloatArray.combine( (x:Float, y:Float) => ( x * y ), this, array )
-  def /=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x / y ), this, array )
-  def *=(array: CDFloatArray) = CDFloatArray.accumulate( (x:Float, y:Float) => ( x * y ), this, array )
-  def -(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x - y ), this, value )
-  def +(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x + y ), this, value )
-  def /(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x / y ), this, value )
-  def *(value: Float) = CDFloatArray.combine( (x:Float, y:Float) => ( x * y ), this, value )
+  def -(array: CDFloatArray) = CDFloatArray.combine( subtractOp, this, array )
+  def -=(array: CDFloatArray) = CDFloatArray.accumulate( subtractOp, this, array )
+  def +(array: CDFloatArray) = CDFloatArray.combine( addOp, this, array )
+  def +=(array: CDFloatArray) = CDFloatArray.accumulate( addOp, this, array )
+  def /(array: CDFloatArray) = CDFloatArray.combine( devideOp, this, array )
+  def *(array: CDFloatArray) = CDFloatArray.combine( multiplyOp, this, array )
+  def /=(array: CDFloatArray) = CDFloatArray.accumulate( devideOp, this, array )
+  def *=(array: CDFloatArray) = CDFloatArray.accumulate( multiplyOp, this, array )
+  def -(value: Float) = CDFloatArray.combine( subtractOp, this, value )
+  def +(value: Float) = CDFloatArray.combine( addOp, this, value )
+  def /(value: Float) = CDFloatArray.combine( devideOp, this, value )
+  def *(value: Float) = CDFloatArray.combine( multiplyOp, this, value )
 
-  def max(reduceDims: Array[Int]): CDFloatArray = reduce( (x:Float, y:Float) => ( if( x > y ) x else y ), reduceDims, Float.MinValue )
-  def min(reduceDims: Array[Int]): CDFloatArray = reduce( (x:Float, y:Float) => ( if( x < y ) x else y ), reduceDims, Float.MaxValue )
-  def sum(reduceDims: Array[Int]): CDFloatArray = reduce( (x:Float, y:Float) => ( x + y ), reduceDims, 0f )
+  def max(reduceDims: Array[Int]): CDFloatArray = reduce( maxOp, reduceDims, Float.MinValue )
+  def min(reduceDims: Array[Int]): CDFloatArray = reduce( minOp, reduceDims, Float.MaxValue )
+  def sum(reduceDims: Array[Int]): CDFloatArray = reduce( addOp, reduceDims, 0f )
+
+  def weightedReduce( reductionOp: ReduceOp, reduceDims: Array[Int], initVal: Float, weightsOpt: Option[CDFloatArray] = None, coordMapOpt: Option[CDCoordMap] = None ): ( CDFloatArray, CDFloatArray ) = {
+    val fullShape = coordMapOpt match { case Some(coordMap) => coordMap.mapShape( getShape ); case None => getShape }
+    val value_accumulator: CDFloatArray = getAccumulatorArray( reduceDims, initVal, fullShape )
+    val weights_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f, fullShape)
+    val iter = getIterator
+    coordMapOpt match {
+      case Some(coordMap) =>
+        for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
+          case Some(weights) =>
+            val weight = weights.getValue(coordIndices);
+            val mappedCoords = coordMap.map(coordIndices)
+            value_accumulator.setValue(mappedCoords, reductionOp(value_accumulator.getValue(mappedCoords), array_value * weight ))
+            weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + weight)
+          case None =>
+            val mappedCoords = coordMap.map(coordIndices)
+            value_accumulator.setValue(mappedCoords, reductionOp(value_accumulator.getValue(mappedCoords), array_value))
+            weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + 1f)
+        }
+      case None =>
+        for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
+          case Some(weights) =>
+            val weight = weights.getValue(coordIndices)
+            value_accumulator.setValue(coordIndices, reductionOp(value_accumulator.getValue(coordIndices), array_value * weight))
+            weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + weight)
+          case None =>
+            value_accumulator.setValue(coordIndices, reductionOp(value_accumulator.getValue(coordIndices), array_value))
+            weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + 1f )
+        }
+    }
+    ( value_accumulator.getReducedArray, weights_accumulator.getReducedArray )
+  }
 
   def mean(reduceDims: Array[Int], weightsOpt: Option[CDFloatArray] = None): CDFloatArray = {
-    if (weightsOpt.isDefined) assert( getShape.sameElements(weightsOpt.get.getShape), " Weight array in mean op has wrong shape: (%s) vs. (%s)".format( weightsOpt.get.getShape.mkString(","), getShape.mkString(",") ))
-    val values_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f)
-    val weights_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f)
-    val iter = getIterator
-    for (cdIndex <- iter; array_value = getData(cdIndex); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
-      case Some(weights) =>
-        val weight = weights.getValue(coordIndices);
-        values_accumulator.setValue(coordIndices, values_accumulator.getValue(coordIndices) + array_value * weight)
-        weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + weight)
-      case None =>
-        values_accumulator.setValue(coordIndices, values_accumulator.getValue(coordIndices) + array_value)
-        weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + 1f)
+    weightedReduce( addOp, reduceDims, 0f, weightsOpt ) match {
+      case ( values_sum, weights_sum ) =>
+        values_sum / weights_sum
     }
-    val values_sum: CDFloatArray = values_accumulator.getReducedArray
-    val weights_sum: CDFloatArray = weights_accumulator.getReducedArray
-    values_sum / weights_sum
   }
 
   def anomaly( reduceDims: Array[Int], weightsOpt: Option[CDFloatArray] = None ): CDFloatArray = {
@@ -259,6 +287,21 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], val invalid: F
     this - meanval
   }
 
+//  if (weightsOpt.isDefined) assert( getShape.sameElements(weightsOpt.get.getShape), " Weight array in mean op has wrong shape: (%s) vs. (%s)".format( weightsOpt.get.getShape.mkString(","), getShape.mkString(",") ))
+//  val values_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f)
+//  val weights_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f)
+//  val iter = getIterator
+//  for (cdIndex <- iter; array_value = getData(cdIndex); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
+//    case Some(weights) =>
+//      val weight = weights.getValue(coordIndices);
+//      values_accumulator.setValue(coordIndices, values_accumulator.getValue(coordIndices) + array_value * weight)
+//      weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + weight)
+//    case None =>
+//      values_accumulator.setValue(coordIndices, values_accumulator.getValue(coordIndices) + array_value)
+//      weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + 1f)
+//  }
+//  val values_sum: CDFloatArray = values_accumulator.getReducedArray
+//  val weights_sum: CDFloatArray = weights_accumulator.getReducedArray
 
 //  def execAccumulatorOp(op: TensorAccumulatorOp, auxDataOpt: Option[CDFloatArray], dimensions: Int*): CDFloatArray = {
 //    assert( dimensions.nonEmpty, "Must specify at least one dimension ('axes' arg) for this operation")
@@ -371,7 +414,7 @@ class CDDoubleArray( cdIndex: CDCoordIndex, storage: Array[Double], val invalid:
 object ArrayReduceTest extends App {
   val base_shape = Array(5,5,5)
   val cd_array = CDFloatArray.spawn( base_shape, (x) => ( 0.5f*x(1) ) )
-  val mean0 = cd_array.mean( Array(1) )
+  val mean0 = cd_array.mean( Array(2) )
   println( mean0.toString )
 }
 

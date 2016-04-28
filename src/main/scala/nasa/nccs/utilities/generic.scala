@@ -12,7 +12,7 @@ import org.slf4j.Logger
 object cdsutils {
 
   def flatlist[T]( values: Option[T]* ): List[T] = values.flatten.toList
-  
+
   def getInstance[T]( cls: Class[T] ) = cls.getConstructor().newInstance()
 
   def findNonNull[T]( values: T* ): Option[T] = values.toList.find( _ != null )
