@@ -224,7 +224,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     sp.getPartition(partition.partIndex, partition.axisIndex ) match {
       case Some(partSection) =>
         val array = ncVariable.read(partSection)
-        val cdArray: CDFloatArray = CDFloatArray.factory(array)
+        val cdArray: CDFloatArray = CDFloatArray.factory(array, missing )
         createPartitionedFragment( fragmentSpec, cdArray )
       case None =>
         logger.warn("No fragment generated for partition index %s out of %d parts".format(partition.partIndex, partition.nPart))
@@ -233,8 +233,8 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   }
 
   def loadRoi( fragmentSpec: DataFragmentSpec ): PartitionedFragment = {
-    val array = ncVariable.read(fragmentSpec.roi)
-    val cdArray: CDFloatArray = CDFloatArray.factory(array)
+    val array: ma2.Array = ncVariable.read(fragmentSpec.roi)
+    val cdArray: CDFloatArray = CDFloatArray.factory(array, missing )
 //    ncVariable.getDimensions.foreach( dim => println( "Dimension %s: %s ".format( dim.getShortName,  dim.writeCDL(true) )))
     createPartitionedFragment( fragmentSpec, cdArray )
   }
