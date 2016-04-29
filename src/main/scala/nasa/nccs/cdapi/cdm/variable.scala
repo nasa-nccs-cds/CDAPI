@@ -263,7 +263,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
 class PartitionedFragment( array: CDFloatArray, val fragmentSpec: DataFragmentSpec, val metaData: (String, String)*  ) {
   val LOG = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def this() = this( new CDFloatArray( Array(0), Array.emptyFloatArray ), new DataFragmentSpec )
+  def this() = this( new CDFloatArray( Array(0), Array.emptyFloatArray, Float.MaxValue ), new DataFragmentSpec )
 
   def getVariableMetadata(serverContext: ServerContext): Map[String,nc2.Attribute] = {
     fragmentSpec.getVariableMetadata(serverContext) ++ Map( metaData.map( item => (item._1 -> new nc2.Attribute(item._1,item._2)) ) :_* )

@@ -37,7 +37,7 @@ trait ExecutionResult {
 class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val gridSpec: GridSpec, val result_tensor: CDFloatArray ) extends ExecutionResult {
   def toXml = {
     val idToks = id.split('~')
-    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.invalid.toString}> {result_tensor.getData.mkString(",")}  </data>  </result>
+    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.getInvalid.toString}> {result_tensor.getData.mkString(",")}  </data>  </result>
   }
 }
 
@@ -164,7 +164,7 @@ abstract class Kernel {
         val dims: IndexedSeq[nc2.Dimension] = (0 until gridSpec.axes.length).map( idim => writer.addDimension(null, gridSpec.axes(idim).name, maskedTensor.getShape(idim)))
         val variable: nc2.Variable = writer.addVariable(null, varname, ma2.DataType.FLOAT, dims.toList)
         varMetadata.values.foreach( attr => variable.addAttribute(attr) )
-        variable.addAttribute( new nc2.Attribute( "missing_value", maskedTensor.invalid ) )
+        variable.addAttribute( new nc2.Attribute( "missing_value", maskedTensor.getInvalid ) )
         dsetMetadata.foreach( attr => writer.addGroupAttribute(null, attr ) )
         try {
           writer.create()
