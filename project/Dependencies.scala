@@ -23,12 +23,14 @@ object Library {
   val natty          = "com.joestelmach"    % "natty"           % "0.11"
   val geotools       = "org.geotools"      %  "gt-shapefile"    % "13.2"
   val netcdfAll      = "edu.ucar"           % "netcdf"          % "4.3.23"
+  val scalactic      = "org.scalactic" %% "scalactic" % "2.2.6"
+  val scalatest      = "org.scalatest" %% "scalatest" % "2.2.6" % "test"
 }
 
 object Dependencies {
   import Library._
 
-  val scala = Seq( logbackClassic, slf4jApi, scalaxml, scalaparser, joda, natty  )
+  val scala = Seq( logbackClassic, slf4jApi, scalaxml, scalaparser, joda, natty, scalactic, scalatest  )
 
   val ndarray = Seq( nd4s, nd4j )
 
