@@ -20,6 +20,7 @@ class Collection( val ctype: String, val url: String, val vars: List[String] = L
   def getUri( varName: String = "" ) = {
     ctype match {
       case "dods" => s"$url/$varName.ncml"
+      case "file" => url
       case _ => throw new Exception( s"Unrecognized collection type: $ctype")
     }
   }
