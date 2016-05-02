@@ -34,6 +34,10 @@ class RequestContext( val domains: Map[String,DomainContainer], val inputs: Map[
     case Some(inputSpec) => inputSpec
     case None => missing_variable(uid)
   }
+  def getDataset( serverContext: ServerContext, uid: String = "" ): CDSDataset = inputs.get( uid ) match {
+    case Some(inputSpec) => inputSpec.data.getDataset(serverContext)
+    case None =>inputs.head._2.data.getDataset(serverContext)
+  }
   def getAxisIndices( uid: String ): AxisIndices = inputs.get(uid) match {
     case Some(inputSpec) => inputSpec.axes
     case None => missing_variable(uid)

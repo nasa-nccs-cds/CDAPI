@@ -157,10 +157,17 @@ abstract class Kernel {
     request.config("resultId") match {
       case None => logger.warn("Missing resultId: can't save result")
       case Some(resultId) =>
+        val dataset: CDSDataset = request.getDataset(server)
         val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
         val resultFile = Kernel.getResultFile( server.getConfiguration, resultId, true )
         val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, resultFile.getAbsolutePath )
         assert(gridSpec.axes.length == maskedTensor.getRank, "Axes not the same length as data shape in saveResult")
+        val coordAxes = dataset.getCoordinateAxes
+        for( coordAxis <- coordAxes ) {
+          val coordVar = writer.addVariable( null, coordAxis.getShortName, coordAxis.getDataType, coordAxis.getDimensions )
+          for( attr <- coordAxis.getAttributes ) writer.addVariableAttribute( coordVar, attr )
+          writer.write( coordVar, coordVar.read )
+        }
         val dims: IndexedSeq[nc2.Dimension] = (0 until gridSpec.axes.length).map( idim => writer.addDimension(null, gridSpec.axes(idim).name, maskedTensor.getShape(idim)))
         val variable: nc2.Variable = writer.addVariable(null, varname, ma2.DataType.FLOAT, dims.toList)
         varMetadata.values.foreach( attr => variable.addAttribute(attr) )

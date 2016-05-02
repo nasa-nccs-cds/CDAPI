@@ -230,6 +230,7 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   val devideOp: ReduceOpFlt = (x:Float, y:Float) => ( x / y )
   val maxOp: ReduceOpFlt = (x:Float, y:Float) => ( if( x > y ) x else y )
   val minOp: ReduceOpFlt = (x:Float, y:Float) => ( if( x < y ) x else y )
+  val eqOp: ReduceOpFlt = (x:Float, y:Float) => ( y )
 
   def this( shape: Array[Int], storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory(shape), storage, invalid )
   def getData: Array[Float] = storage.asInstanceOf[Array[Float]]
@@ -255,6 +256,7 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   def +(value: Float) = CDFloatArray.combine( addOp, this, value )
   def /(value: Float) = CDFloatArray.combine( devideOp, this, value )
   def *(value: Float) = CDFloatArray.combine( multiplyOp, this, value )
+  def :=(value: Float) = CDFloatArray.combine( eqOp, this, value )
 
   def max(reduceDims: Array[Int]): CDFloatArray = reduce( maxOp, reduceDims, Float.MinValue )
   def min(reduceDims: Array[Int]): CDFloatArray = reduce( minOp, reduceDims, Float.MaxValue )

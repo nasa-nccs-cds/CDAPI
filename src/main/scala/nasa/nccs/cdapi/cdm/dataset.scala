@@ -29,9 +29,13 @@ class Collection( val ctype: String, val url: String, val vars: List[String] = L
 object CDSDataset {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def load( dsetName: String, collection: Collection, varName: String = "" ) = {
+  def load( dsetName: String, collection: Collection, varName: String ): CDSDataset = {
+    val uri = collection.getUri(varName)
+    load(dsetName, uri, varName)
+  }
+
+  def load( dsetName: String, uri: String, varName: String ): CDSDataset = {
     val t0 = System.nanoTime
-    val uri = collection.getUri( varName )
     val ncDataset: NetcdfDataset = loadNetCDFDataSet( uri )
     val coordSystems: List[CoordinateSystem] = ncDataset.getCoordinateSystems.toList
     assert( coordSystems.size <= 1, "Multiple coordinate systems for one dataset is not supported" )

@@ -260,6 +260,9 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
     var dset: CDSDataset = serverContext.getDataset( collection, varname )
     dset.attributes
   }
+  def getDataset(serverContext: ServerContext): CDSDataset = {
+    serverContext.getDataset( collection, varname )
+  }
 
   def reduceSection( dimensions: Int*  ): DataFragmentSpec = {
     var newSection = roi;
@@ -469,7 +472,7 @@ object OperationContext extends ContainerBase  {
         for( raw_arg<-args; arg=raw_arg.toString ) {
           if(arg contains ":") {
             val arg_items = arg.split(":").map( _.trim.toLowerCase )
-            optargs += ( arg_items(0) -> arg_items(1) )
+            optargs += ( if( arg_items.length > 1 ) ( arg_items(0) -> arg_items(1) ) else ( arg_items(0) -> "" ) )
           }
           else varlist += arg.trim.toLowerCase
         }
