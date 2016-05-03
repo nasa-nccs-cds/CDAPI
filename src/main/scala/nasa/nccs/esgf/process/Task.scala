@@ -1,7 +1,8 @@
 package nasa.nccs.esgf.process
 
-import nasa.nccs.cdapi.cdm.{CDSDataset, CDSVariable, PartitionedFragment}
+import nasa.nccs.cdapi.cdm.{CDSDataset, CDSVariable, Collection, PartitionedFragment}
 import ucar.{ma2, nc2}
+
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
@@ -187,7 +188,7 @@ class PartitionSpec( val axisIndex: Int, val nPart: Int, val partIndex: Int = 0 
   override def toString =  s"PartitionSpec { axis = $axisIndex, nPart = $nPart, partIndex = $partIndex }"
 }
 
-class DataSource( val name: String, val collection: String, val domain: String ) {
+class DataSource(val name: String, val collection: String, val domain: String ) {
   def this( dsource: DataSource ) = this( dsource.name, dsource.collection, dsource.domain )
   override def toString =  s"DataSource { name = $name, collection = $collection, domain = $domain }"
   def toXml = <dataset name={name} collection={collection.toString} domain={domain.toString}/>
@@ -226,6 +227,13 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
   private def collapse( range: ma2.Range, newsize: Int = 1 ): ma2.Range = newsize match {
     case 1 => val mid_val = (range.first+range.last)/2; new ma2.Range(range.getName,mid_val,mid_val)
     case ns => val incr = math.round((range.last-range.first)/ns.toFloat); new ma2.Range(range.getName,range.first(),range.last,incr)
+  }
+  def getRange( dimension_name: String ): Option[ma2.Range] = {
+    val dims = dimensions.toLowerCase.split(' ')
+    dims.indexOf( dimension_name.toLowerCase ) match {
+      case -1 => None
+      case x => Some( roi.getRange( x ) )
+    }
   }
 
   def getKey: DataFragmentKey = {
@@ -336,7 +344,7 @@ object DataContainer extends ContainerBase {
       val fullname = filterMap(metadata, key_equals("name")) match { case None => ""; case Some(x) => x.toString }
       val domain = filterMap(metadata, key_equals("domain")) match { case None => ""; case Some(x) => x.toString }
       val name_items = fullname.toString.split(':')
-      val dsource = new DataSource( normalize(name_items.head), normalize( parseUri( uri ) ), normalize(domain) )
+      val dsource = new DataSource( normalize(name_items.head), normalize( uri ), normalize(domain) )
       new DataContainer(normalize(name_items.last), source = Some(dsource) )
     } catch {
       case e: Exception =>
@@ -345,11 +353,13 @@ object DataContainer extends ContainerBase {
         throw new Exception( e.getMessage, e )
     }
   }
+
   def parseUri( uri: String ): String = {
     if(uri.isEmpty) "" else {
+      val recognizedUrlTypes = List( "file", "collection" )
       val uri_parts = uri.split("://")
       val url_type = normalize(uri_parts.head)
-      if ((url_type == "collection") && (uri_parts.length == 2)) uri_parts.last
+      if ( recognizedUrlTypes.contains(url_type) && (uri_parts.length == 2) ) uri_parts.last
       else throw new Exception("Unrecognized uri format: " + uri + ", type = " + uri_parts.head + ", nparts = " + uri_parts.length.toString + ", value = " + uri_parts.last)
     }
   }

@@ -4,7 +4,7 @@ import nasa.nccs.cdapi.tensors.CDFloatArray
 import nasa.nccs.cdapi.cdm._
 import nasa.nccs.esgf.process._
 import org.slf4j.LoggerFactory
-import java.io.{File, IOException}
+import java.io.{File, IOException, PrintWriter, StringWriter}
 
 import ucar.{ma2, nc2}
 
@@ -41,6 +41,20 @@ class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmen
   }
 }
 
+class ErrorExecutionResult( err: Throwable ) extends ExecutionResult {
+
+  def fatal(err: Throwable): String = {
+    logger.error( "\nError Executing Kernel: %s\n".format(err.getMessage) )
+    val sw = new StringWriter
+    err.printStackTrace(new PrintWriter(sw))
+    logger.error( sw.toString )
+    err.getMessage
+  }
+
+  def toXml = <error> {fatal(err)} </error>
+
+}
+
 class XmlExecutionResult( val id: String,  val responseXml: xml.Node ) extends ExecutionResult {
   def toXml = {
     val idToks = id.split('~')
@@ -56,6 +70,7 @@ class AsyncExecutionResult( val results: List[String] )  extends ExecutionResult
 }
 
 class ExecutionResults( val results: List[ExecutionResult] ) {
+  def this(err: Throwable ) = this( List( new ErrorExecutionResult( err ) ) )
   def toXml = <results> { results.map(_.toXml) } </results>
 }
 
@@ -152,29 +167,33 @@ abstract class Kernel {
       }
     }
   }
-
+//
   def saveResult( maskedTensor: CDFloatArray, request: RequestContext, server: ServerContext, gridSpec: GridSpec, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
     request.config("resultId") match {
       case None => logger.warn("Missing resultId: can't save result")
       case Some(resultId) =>
+        val inputSpec = request.getInputSpec()
         val dataset: CDSDataset = request.getDataset(server)
         val varname = searchForValue( varMetadata, List("varname","fullname","standard_name","original_name","long_name"), "Nd4jMaskedTensor" )
         val resultFile = Kernel.getResultFile( server.getConfiguration, resultId, true )
         val writer: nc2.NetcdfFileWriter = nc2.NetcdfFileWriter.createNew(nc2.NetcdfFileWriter.Version.netcdf4, resultFile.getAbsolutePath )
         assert(gridSpec.axes.length == maskedTensor.getRank, "Axes not the same length as data shape in saveResult")
         val coordAxes = dataset.getCoordinateAxes
-        for( coordAxis <- coordAxes ) {
-          val coordVar = writer.addVariable( null, coordAxis.getShortName, coordAxis.getDataType, coordAxis.getDimensions )
-          for( attr <- coordAxis.getAttributes ) writer.addVariableAttribute( coordVar, attr )
-          writer.write( coordVar, coordVar.read )
-        }
         val dims: IndexedSeq[nc2.Dimension] = (0 until gridSpec.axes.length).map( idim => writer.addDimension(null, gridSpec.axes(idim).name, maskedTensor.getShape(idim)))
+        val newCoordVars: List[ (nc2.Variable,ma2.Array) ] = ( for( coordAxis <- coordAxes ) yield inputSpec.getRange( coordAxis.getShortName ) match {
+          case Some( range ) =>
+            val coordVar: nc2.Variable = writer.addVariable( null, coordAxis.getShortName, coordAxis.getDataType, coordAxis.getShortName )
+            for( attr <- coordAxis.getAttributes ) writer.addVariableAttribute( coordVar, attr )
+            Some( coordVar, coordAxis.read( List(range) ) )
+          case None => None
+        } ).flatten
         val variable: nc2.Variable = writer.addVariable(null, varname, ma2.DataType.FLOAT, dims.toList)
         varMetadata.values.foreach( attr => variable.addAttribute(attr) )
         variable.addAttribute( new nc2.Attribute( "missing_value", maskedTensor.getInvalid ) )
         dsetMetadata.foreach( attr => writer.addGroupAttribute(null, attr ) )
         try {
           writer.create()
+          for( newCoordVar <- newCoordVars ) newCoordVar match { case ( coordVar, coordData ) =>  writer.write( coordVar, coordData ) }
           writer.write( variable, maskedTensor )
 //          for( dim <- dims ) {
 //            val dimvar: nc2.Variable = writer.addVariable(null, dim.getFullName, ma2.DataType.FLOAT, List(dim) )

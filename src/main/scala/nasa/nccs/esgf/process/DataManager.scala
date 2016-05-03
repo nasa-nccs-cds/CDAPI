@@ -30,13 +30,17 @@ class RequestContext( val domains: Map[String,DomainContainer], val inputs: Map[
   def getConfiguration = configuration
   def missing_variable(uid: String) = throw new Exception("Can't find Variable '%s' in uids: [ %s ]".format(uid, inputs.keySet.mkString(", ")))
   def getDataSources: Map[String, OperationInputSpec] = inputs
-  def getInputSpec( uid: String ): OperationInputSpec = inputs.get( uid ) match {
+  def getInputSpec( uid: String = "" ): OperationInputSpec = inputs.get( uid ) match {
     case Some(inputSpec) => inputSpec
-    case None => missing_variable(uid)
+    case None => inputs.head._2
   }
   def getDataset( serverContext: ServerContext, uid: String = "" ): CDSDataset = inputs.get( uid ) match {
     case Some(inputSpec) => inputSpec.data.getDataset(serverContext)
     case None =>inputs.head._2.data.getDataset(serverContext)
+  }
+  def getSection( serverContext: ServerContext, uid: String = "" ): ma2.Section = inputs.get( uid ) match {
+    case Some(inputSpec) => inputSpec.data.roi
+    case None =>inputs.head._2.data.roi
   }
   def getAxisIndices( uid: String ): AxisIndices = inputs.get(uid) match {
     case Some(inputSpec) => inputSpec.axes
@@ -48,7 +52,9 @@ class RequestContext( val domains: Map[String,DomainContainer], val inputs: Map[
   }
 }
 
-case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {}
+case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {
+  def getRange( dimension_name: String ): Option[ma2.Range] = data.getRange( dimension_name )
+}
 
 class ServerContext( val dataLoader: DataLoader, private val configuration: Map[String,String] )  extends ScopeContext {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
@@ -65,6 +71,7 @@ class ServerContext( val dataLoader: DataLoader, private val configuration: Map[
     val range = fragSpec.roi.getRange( axisIndex )
     ( axisIndex -> coordAxis.read( List(range) ) )
   }
+
 
   def getDataset(collection: String, varname: String ): CDSDataset = dataLoader.getDataset( collection, varname )
 
