@@ -237,6 +237,7 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   val eqOp: ReduceOpFlt = (x:Float, y:Float) => ( y )
 
   def this( shape: Array[Int], storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory(shape), storage, invalid )
+  def this( storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory( Array(storage.size) ), storage, invalid )
   def getData: Array[Float] = storage.asInstanceOf[Array[Float]]
   override def dup(): CDFloatArray = new CDFloatArray( cdIndex.getShape, this.getSectionData, invalid )
   def valid( value: Float ) = ( value != invalid )

@@ -192,9 +192,9 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
             case -1 => throw new IllegalStateException("CDS2-CDSVariable: Can't find axis %s in variable %s".format(coordAxis.getShortName, ncVariable.getNameAndDimensions))
             case dimension_index =>
               axis.system match {
-                case "indices" =>
+                case asys if asys.startsWith( "ind" ) =>
                   shape.update(dimension_index, new ma2.Range(axis.start.toInt, axis.end.toInt, 1))
-                case "values" =>
+                case asys if asys.startsWith( "val" ) =>
                   val boundedRange = getIndexBounds(coordAxis, axis.start, axis.end)
                   shape.update(dimension_index, boundedRange)
                 case _ => throw new IllegalStateException("CDSVariable: Illegal system value in axis bounds: " + axis.system)

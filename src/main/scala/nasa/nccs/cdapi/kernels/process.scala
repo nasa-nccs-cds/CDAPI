@@ -41,9 +41,9 @@ class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmen
   }
 }
 
-class ErrorExecutionResult( err: Throwable ) extends ExecutionResult {
+class ErrorExecutionResult( val err: Throwable ) extends ExecutionResult {
 
-  def fatal(err: Throwable): String = {
+  def fatal(): String = {
     logger.error( "\nError Executing Kernel: %s\n".format(err.getMessage) )
     val sw = new StringWriter
     err.printStackTrace(new PrintWriter(sw))
@@ -51,7 +51,7 @@ class ErrorExecutionResult( err: Throwable ) extends ExecutionResult {
     err.getMessage
   }
 
-  def toXml = <error> {fatal(err)} </error>
+  def toXml = <error> {fatal()} </error>
 
 }
 
