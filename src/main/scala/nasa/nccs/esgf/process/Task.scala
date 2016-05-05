@@ -253,7 +253,10 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
   }
 
   def getSubSection( subsection: ma2.Section  ): ma2.Section = {
-    new ma2.Section( roi.getRanges.zipWithIndex.map( rngIndx => { rngIndx._1.compose( subsection.getRange(rngIndx._2) ) } ) )
+    new ma2.Section( roi.getRanges.zipWithIndex.map( rngIndx => {
+      val ss = subsection.getRange(rngIndx._2)
+      rngIndx._1.compose( ss )
+    } ) )
 
   }
 

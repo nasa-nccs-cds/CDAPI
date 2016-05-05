@@ -12,27 +12,17 @@ _Implements the ESGF-CWT climate data services api for the BDWPS framework._
 
 ####  Build the ESGF WPS API plugin:
 
-    1) Checkout the esgfWpsApi sources:
+    1) Checkout and build the CDAPI sources:
 
-        >> git clone https://github.com/nasa-nccs-cds/esgfWpsApi.git
-
-    2) Build the plugin jar file:
-
-        >> cd esgfWpsApi
-        >> sbt package
+        >> git clone https://github.com/nasa-nccs-cds/CDAPI.git
+        >> cd CDAPI; sbt publish-local
 
 
 ####  Code development:
 
     1) Install IntelliJ IDEA CE from https://www.jetbrains.com/idea/download/ with Scala plugin enabled.
     
-    2) Start IDEA and import the esgfWpsApi Project from Version Control (github) using the address https://github.com/nasa-nccs-cds/esgfWpsApi.git.
+    2) Start IDEA and import the CDAPI Project from Version Control (github) using the address https://github.com/nasa-nccs-cds/CDAPI.git.
     
-
-####  Project Configuration:
-
-    1) Logging: Edit src/main/resources/logback.xml
-    
-
     
 
