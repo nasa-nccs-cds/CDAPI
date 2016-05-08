@@ -269,8 +269,9 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
 
   def weightedReduce( reductionOp: ReduceOpFlt, reduceDims: Array[Int], initVal: Float, weightsOpt: Option[CDFloatArray] = None, coordMapOpt: Option[CDCoordMap] = None ): ( CDFloatArray, CDFloatArray ) = {
     val fullShape = coordMapOpt match { case Some(coordMap) => coordMap.mapShape( getShape ); case None => getShape }
-    val value_accumulator: CDFloatArray = getAccumulatorArray( reduceDims, initVal, fullShape )
-    val weights_accumulator: CDFloatArray = getAccumulatorArray(reduceDims, 0f, fullShape)
+    val bcastReductionDims = coordMapOpt match { case None => reduceDims; case Some( coordMap ) => reduceDims.filterNot( _ == coordMap.dimIndex ) }
+    val value_accumulator: CDFloatArray = getAccumulatorArray( bcastReductionDims, initVal, fullShape )
+    val weights_accumulator: CDFloatArray = getAccumulatorArray( bcastReductionDims, 0f, fullShape )
     val iter = getIterator
     coordMapOpt match {
       case Some(coordMap) =>
@@ -279,11 +280,11 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
             val weight = weights.getValue(coordIndices);
             val mappedCoords = coordMap.map(coordIndices)
             value_accumulator.setValue(mappedCoords, reductionOp(value_accumulator.getValue(mappedCoords), array_value * weight ))
-            weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + weight)
+            weights_accumulator.setValue(mappedCoords, weights_accumulator.getValue(mappedCoords) + weight)
           case None =>
             val mappedCoords = coordMap.map(coordIndices)
             value_accumulator.setValue(mappedCoords, reductionOp(value_accumulator.getValue(mappedCoords), array_value))
-            weights_accumulator.setValue(coordIndices, weights_accumulator.getValue(coordIndices) + 1f)
+            weights_accumulator.setValue(mappedCoords, weights_accumulator.getValue(mappedCoords) + 1f)
         }
       case None =>
         for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
