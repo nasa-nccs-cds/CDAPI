@@ -170,7 +170,7 @@ abstract class Kernel {
 //
   def saveResult( maskedTensor: CDFloatArray, request: RequestContext, server: ServerContext, gridSpec: GridSpec, varMetadata: Map[String,nc2.Attribute], dsetMetadata: List[nc2.Attribute] ): Option[String] = {
     request.config("resultId") match {
-      case None => logger.warn("Missing resultId: can't save result")
+      case None => logger.warn("Missing resultId: this probably means you are executing synchronously with 'async' = true ")
       case Some(resultId) =>
         val inputSpec = request.getInputSpec()
         val dataset: CDSDataset = request.getDataset(server)
