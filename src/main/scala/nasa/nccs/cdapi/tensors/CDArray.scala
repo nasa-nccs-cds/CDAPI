@@ -231,11 +231,19 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   val addOp: ReduceOpFlt = (x:Float, y:Float) => ( x + y )
   val subtractOp: ReduceOpFlt = (x:Float, y:Float) => ( x - y )
   val multiplyOp: ReduceOpFlt = (x:Float, y:Float) => ( x * y )
-  val devideOp: ReduceOpFlt = (x:Float, y:Float) => ( x / y )
+  val divideOp: ReduceOpFlt = (x:Float, y:Float) => ( x / y )
   val maxOp: ReduceOpFlt = (x:Float, y:Float) => ( if( x > y ) x else y )
   val minOp: ReduceOpFlt = (x:Float, y:Float) => ( if( x < y ) x else y )
   val eqOp: ReduceOpFlt = (x:Float, y:Float) => ( y )
-
+  def getOp( opName: String ): ReduceOpFlt = opName match {
+    case x if x.startsWith("sum") => addOp
+    case x if x.startsWith("add") => addOp
+    case x if x.startsWith("sub") => subtractOp
+    case x if x.startsWith("mul") => multiplyOp
+    case x if x.startsWith("div") => divideOp
+    case x if x.startsWith("max") => maxOp
+    case x if x.startsWith("min") => minOp
+  }
   def this( shape: Array[Int], storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory(shape), storage, invalid )
   def this( storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory( Array(storage.size) ), storage, invalid )
   def getData: Array[Float] = storage.asInstanceOf[Array[Float]]
@@ -253,13 +261,13 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   def -=(array: CDFloatArray) = CDFloatArray.accumulate( subtractOp, this, array )
   def +(array: CDFloatArray) = CDFloatArray.combine( addOp, this, array )
   def +=(array: CDFloatArray) = CDFloatArray.accumulate( addOp, this, array )
-  def /(array: CDFloatArray) = CDFloatArray.combine( devideOp, this, array )
+  def /(array: CDFloatArray) = CDFloatArray.combine( divideOp, this, array )
   def *(array: CDFloatArray) = CDFloatArray.combine( multiplyOp, this, array )
-  def /=(array: CDFloatArray) = CDFloatArray.accumulate( devideOp, this, array )
+  def /=(array: CDFloatArray) = CDFloatArray.accumulate( divideOp, this, array )
   def *=(array: CDFloatArray) = CDFloatArray.accumulate( multiplyOp, this, array )
   def -(value: Float) = CDFloatArray.combine( subtractOp, this, value )
   def +(value: Float) = CDFloatArray.combine( addOp, this, value )
-  def /(value: Float) = CDFloatArray.combine( devideOp, this, value )
+  def /(value: Float) = CDFloatArray.combine( divideOp, this, value )
   def *(value: Float) = CDFloatArray.combine( multiplyOp, this, value )
   def :=(value: Float) = CDFloatArray.combine( eqOp, this, value )
 
