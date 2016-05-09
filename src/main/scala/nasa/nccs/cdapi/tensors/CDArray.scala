@@ -256,7 +256,6 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   def invalids: CDFloatArray = new CDFloatArray( getShape, Array.fill[Float]( getSize )(invalid), invalid )
   def getInvalid = invalid
 
-
   def -(array: CDFloatArray) = CDFloatArray.combine( subtractOp, this, array )
   def -=(array: CDFloatArray) = CDFloatArray.accumulate( subtractOp, this, array )
   def +(array: CDFloatArray) = CDFloatArray.combine( addOp, this, array )
