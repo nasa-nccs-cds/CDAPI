@@ -219,6 +219,15 @@ object DataFragmentKey {
   }
 }
 
+object DataFragmentSpec {
+
+  def offset( section: ma2.Section, newOrigin: ma2.Section ): ma2.Section = {
+    assert(newOrigin.getRank == section.getRank, "Invalid Section rank in offset")
+    val new_ranges = for (i <- (0 until section.getRank); range = section.getRange(i); origin = newOrigin.getRange(i)) yield range.shiftOrigin(-origin.first())
+    new ma2.Section(new_ranges)
+  }
+}
+
 class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val units: String="", val longname: String="", val roi: ma2.Section = new ma2.Section(), val partitions: Array[PartitionSpec]= Array() )  {
   override def toString =  "DataFragmentSpec { varname = %s, collection = %s, dimensions = %s, units = %s, longname = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, dimensions, units, longname, roi.toString, partitions.map(_.toString).mkString(", "))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
@@ -243,10 +252,8 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
 
   def getKeyString: String = getKey.toString
 
-  def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec = {
-    val newSection = roi.intersect(cutSection).shiftOrigin(roi)
-    new DataFragmentSpec( varname, collection, dimensions, units, longname, newSection, partitions )
-  }
+  def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec =
+    new DataFragmentSpec( varname, collection, dimensions, units, longname, roi.intersect(cutSection), partitions )
 
   def getReducedSection( axisIndices: Set[Int], newsize: Int = 1 ): ma2.Section = {
     new ma2.Section( roi.getRanges.zipWithIndex.map( rngIndx => if( axisIndices(rngIndx._2) ) collapse( rngIndx._1, newsize ) else rngIndx._1 ):_* )

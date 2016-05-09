@@ -134,8 +134,8 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
         val timeAxis: CoordinateAxis1DTime = CoordinateAxis1DTime.factory(dataset.ncDataset, coordAxis, new Formatter())
         val timeCalValues: List[CalendarDate] = timeAxis.getCalendarDates.toList
         val timeZero = CalendarDate.of(timeCalValues.head.getCalendar,1970,1,1,1,1,1)
-        val timeRelValues = timeCalValues.map( calVal => calVal.getDifferenceInMsecs(timeZero)/1000.0 ).toArray
-        new IregularAxisSpec( "time", AxisType.Time, "seconds since 1970-1-1", timeRelValues )
+        val timeRelValues = for( index <- (range.first() to range.last() by range.stride()); calVal = timeCalValues(index) ) yield calVal.getDifferenceInMsecs(timeZero)/1000.0
+        new IregularAxisSpec( "time", AxisType.Time, "seconds since 1970-1-1", timeRelValues.toArray )
       case x =>
         if (coordAxis.isRegular) new RegularAxisSpec(coordAxis.getFullName, coordAxis.getAxisType, coordAxis.getUnitsString, coordAxis.getCoordValue(range.first), coordAxis.getIncrement, range.length)
         else {
@@ -145,7 +145,10 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
       }
   }
 
-  def getAxisSpecs( section: ma2.Section ): List[AxisSpec] =  for( axisRangeTup <- getCoordinateAxes zip section.getRanges) yield getAxisSpec( axisRangeTup._1, axisRangeTup._2 )
+  def getAxisSpecs( section: ma2.Section ): List[AxisSpec] =
+    for( axisRangeTup <- getCoordinateAxes zip section.getRanges)
+      yield getAxisSpec( axisRangeTup._1, axisRangeTup._2 )
+
   def getGridSpec( section: ma2.Section ): GridSpec = new GridSpec( getAxisSpecs(section) )
 
   def toCoordAxis1D(coordAxis: CoordinateAxis): CoordinateAxis1D = coordAxis match {
@@ -280,7 +283,7 @@ class PartitionedFragment( array: CDFloatArray, val fragmentSpec: DataFragmentSp
 
   def cutIntersection( cutSection: ma2.Section, copy: Boolean = true ): PartitionedFragment = {
     val newFragSpec = fragmentSpec.cutIntersection(cutSection)
-    val newDataArray: CDFloatArray = array.section( newFragSpec.roi.getRanges.toList )
+    val newDataArray: CDFloatArray = array.section( newFragSpec.roi.shiftOrigin(fragmentSpec.roi).getRanges.toList )
     new PartitionedFragment( if(copy) newDataArray.dup else newDataArray, newFragSpec )
   }
 
