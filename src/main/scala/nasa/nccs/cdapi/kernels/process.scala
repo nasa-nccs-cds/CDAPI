@@ -37,7 +37,7 @@ trait ExecutionResult {
 class BlockingExecutionResult( val id: String, val intputSpecs: List[DataFragmentSpec], val gridSpec: GridSpec, val result_tensor: CDFloatArray ) extends ExecutionResult {
   def toXml = {
     val idToks = id.split('~')
-    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.getInvalid.toString}> {result_tensor.getData.mkString(",")}  </data>  </result>
+    <result id={idToks(1)} op={idToks(0)}> { intputSpecs.map( _.toXml ) } { gridSpec.toXml } <data undefined={result_tensor.getInvalid.toString}> {result_tensor.copySectionData.mkString(",")}  </data>  </result>
   }
 }
 

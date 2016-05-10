@@ -686,6 +686,26 @@ class CDIndexIterator5D( index: CDCoordIndex ) extends  CDArrayIndexIterator( in
   }
 }
 
+class DualArrayIterator( input0: CDFloatArray, input1: CDFloatArray ) {
+  assert( input0.getRank == input1.getRank, "Can't combine arrays with different ranks")
+  val sameStructure = input0.getStride.sameElements(input1.getStride)
+  val sameShape = input0.getShape.sameElements(input1.getShape)
+  val shape: Array[Int] = if(sameShape) input0.getShape else ( for( iS <- (0 until input0.getRank); s0 = input0.getShape(iS); s1 = input1.getShape(iS) )  yield
+    if ( s0 == s1 ) s0
+    else if ( s0 == 1 ) s1
+    else if ( s1 == 1 ) s0
+    else throw new Exception( "Attempt to combine incummensurate shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",") ) ) ).toArray
+
+  val i0 = if( input0.getShape.sameElements(shape) ) input0 else input0.broadcast(shape)
+  val i1 = if( input1.getShape.sameElements(shape) ) input1 else input1.broadcast(shape)
+
+
+//  val iter = input0.getIterator
+//  val result = for (flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); v1 = if(sameStructure) input1.getFlatValue(flatIndex) else input1.getValue( iter.getCoordinateIndices ) ) yield
+//  if (!input0.valid(v0)) input0.invalid else if (!input1.valid(v1)) input0.invalid else reductionOp(v0, v1)
+//  new CDFloatArray( input0.getShape, result.toArray, input0.invalid )
+}
+
 
 
 
