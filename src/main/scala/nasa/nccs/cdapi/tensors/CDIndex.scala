@@ -203,12 +203,12 @@ object CDTimeCoordMap {
             } else {
               val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
               val binIndices: Array[Int] =  timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Month)-1 + cdate.getFieldValue(Year) - year_offset ).toArray
-              new CDCoordArrayMap( dimIndex, coordinateAxis.getShape(0), binIndices )
+              new CDCoordArrayMap( dimIndex, coordinateAxis.getShape(0)/12, binIndices )
             }
           case "year" =>
             val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
             val binIndices: Array[Int] =  timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Year) - year_offset ).toArray
-            new CDCoordArrayMap( dimIndex, coordinateAxis.getShape(0), binIndices )
+            new CDCoordArrayMap( dimIndex, coordinateAxis.getShape(0)/12, binIndices )
           case x => throw new Exception("Binning not yet implemented for this step type: %s".format(step))
         }
       case x => throw new Exception("Binning not yet implemented for this axis type: %s".format(x.getClass.getName))
