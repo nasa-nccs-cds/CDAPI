@@ -68,6 +68,7 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndex: CDCoordIndex, privat
   def getReducedShape: Array[Int] = cdIndex.getReducedShape
   def getFlatValue( index: Int ): T = storage(index)
   def getValue( indices: Array[Int] ): T = storage( cdIndex.getFlatIndex(indices) )
+  def getValue( index: Int ): T = getValue( Array(index) )
   def setFlatValue( index: Int, value: T ): Unit = { storage(index) = value }
   def setValue( indices: Array[Int], value: T ): Unit = { storage( cdIndex.getFlatIndex(indices) ) = value }
   def getSize: Int =  cdIndex.getSize
