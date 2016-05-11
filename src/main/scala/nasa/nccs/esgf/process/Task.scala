@@ -354,7 +354,7 @@ object DataContainer extends ContainerBase {
       val fullname = filterMap(metadata, key_equals("name")) match { case None => ""; case Some(x) => x.toString }
       val domain = filterMap(metadata, key_equals("domain")) match { case None => ""; case Some(x) => x.toString }
       val name_items = fullname.toString.split(':')
-      val dsource = new DataSource( normalize(name_items.head), normalize( uri ), normalize(domain) )
+      val dsource = new DataSource( normalize(name_items.head), uri, normalize(domain) )
       new DataContainer(normalize(name_items.last), source = Some(dsource) )
     } catch {
       case e: Exception =>
