@@ -4,6 +4,8 @@ package nasa.nccs.cdapi.tensors
 
 object CDIterator {
 
+  def factory( shape: Array[Int] ): CDArrayIndexIterator = factory( CDCoordIndex.factory(shape) )
+
   def factory( cdIndex: CDCoordIndex ): CDArrayIndexIterator = cdIndex.getRank match {
     case 1 =>
       return new CDIndexIterator1D(cdIndex)
@@ -688,25 +690,49 @@ class CDIndexIterator5D( index: CDCoordIndex ) extends  CDArrayIndexIterator( in
   }
 }
 
-class DualArrayIterator( input0: CDFloatArray, input1: CDFloatArray ) {
-  assert( input0.getRank == input1.getRank, "Can't combine arrays with different ranks")
-  val sameStructure = input0.getStride.sameElements(input1.getStride)
-  val sameShape = input0.getShape.sameElements(input1.getShape)
-  val shape: Array[Int] = if(sameShape) input0.getShape else ( for( iS <- (0 until input0.getRank); s0 = input0.getShape(iS); s1 = input1.getShape(iS) )  yield
-    if ( s0 == s1 ) s0
-    else if ( s0 == 1 ) s1
-    else if ( s1 == 1 ) s0
-    else throw new Exception( "Attempt to combine incummensurate shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",") ) ) ).toArray
+object DualArrayIterator {
+  def apply( input0: CDFloatArray, input1: CDFloatArray ): DualArrayIterator = {
+    assert( input0.getRank == input1.getRank, "Can't combine arrays with different ranks")
+    val sameShape = input0.getShape.sameElements(input1.getShape)
+    val shape: Array[Int] = if(sameShape) input0.getShape else ( for( iS <- (0 until input0.getRank); s0 = input0.getShape(iS); s1 = input1.getShape(iS) )  yield
+      if ( s0 == s1 ) s0
+      else if ( s0 == 1 ) s1
+      else if ( s1 == 1 ) s0
+      else throw new Exception( "Attempt to combine incummensurate shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",") ) ) ).toArray
 
-  val i0 = if( input0.getShape.sameElements(shape) ) input0 else input0.broadcast(shape)
-  val i1 = if( input1.getShape.sameElements(shape) ) input1 else input1.broadcast(shape)
+    val cdIndex = CDCoordIndex.factory(shape)
+    val sameShape0 = input0.getShape.sameElements(shape)
+    val sameShape1 = input1.getShape.sameElements(shape)
+    val array0 = if(sameShape0) input0 else input0.broadcast(shape)
+    val array1 = if(sameShape1) input1 else input1.broadcast(shape)
+    new DualArrayIterator( array0, array1, cdIndex )
+  }
+}
+
+class DualArrayIterator( val array0: CDFloatArray, val array1: CDFloatArray, cdIndex: CDCoordIndex ) extends CDArrayIndexIterator( cdIndex  ) {
+  val sameStructure0 = checkArrayStructure( 0 )
+  val sameStructure1 = checkArrayStructure( 1 )
+  var storageIndex = 0
+
+  def checkArrayStructure( array_index: Int ): Boolean = {
+    val _array = array_index match { case 0 => array0; case 1 => array1 }
+    assert(_array.getShape.sameElements(cdIndex.getShape), "Error, array has wrong shape in DualArrayIterator!")
+    _array.getStride.sameElements( cdIndex.getStride )
+  }
+  override def incr: Int = { storageIndex = super.incr; storageIndex }
+
+  def value0() = if(sameStructure0) array0.getStorageValue(storageIndex) else array0.getValue(coordIndices)
+  def value1() = if(sameStructure1) array1.getStorageValue(storageIndex) else array1.getValue(coordIndices)
+
+}
+
 
 
 //  val iter = input0.getIterator
 //  val result = for (flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); v1 = if(sameStructure) input1.getFlatValue(flatIndex) else input1.getValue( iter.getCoordinateIndices ) ) yield
 //  if (!input0.valid(v0)) input0.invalid else if (!input1.valid(v1)) input0.invalid else reductionOp(v0, v1)
 //  new CDFloatArray( input0.getShape, result.toArray, input0.invalid )
-}
+
 
 
 
