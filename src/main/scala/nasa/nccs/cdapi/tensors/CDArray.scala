@@ -246,7 +246,7 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   }
   def this( shape: Array[Int], storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory(shape), storage, invalid )
   def this( storage: Array[Float], invalid: Float ) = this( CDCoordIndex.factory( Array(storage.size) ), storage, invalid )
-  def getData: Array[Float] = storage.asInstanceOf[Array[Float]]
+  protected def getData: Array[Float] = storage.asInstanceOf[Array[Float]]
   override def dup(): CDFloatArray = new CDFloatArray( cdIndex.getShape, this.getSectionData, invalid )
   def valid( value: Float ) = ( value != invalid )
   def toCDFloatArray( target: CDArray[Float] ) = new CDFloatArray( target.getIndex, target.getStorage, invalid )
@@ -369,7 +369,7 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
 
 class CDByteArray( cdIndex: CDCoordIndex, storage: Array[Byte] ) extends CDArray[Byte](cdIndex,storage) {
 
-  def getData: Array[Byte] = storage.asInstanceOf[Array[Byte]]
+  protected def getData: Array[Byte] = storage.asInstanceOf[Array[Byte]]
 
   def this( shape: Array[Int], storage: Array[Byte] ) = this( CDCoordIndex.factory(shape), storage )
 
@@ -387,7 +387,7 @@ class CDByteArray( cdIndex: CDCoordIndex, storage: Array[Byte] ) extends CDArray
 
 class CDIntArray( cdIndex: CDCoordIndex, storage: Array[Int] ) extends CDArray[Int](cdIndex,storage) {
 
-  def getData: Array[Int] = storage.asInstanceOf[Array[Int]]
+  protected def getData: Array[Int] = storage.asInstanceOf[Array[Int]]
 
   def this( shape: Array[Int], storage: Array[Int] ) = this( CDCoordIndex.factory(shape), storage )
   def valid( value: Int ): Boolean = true
@@ -404,7 +404,7 @@ class CDIntArray( cdIndex: CDCoordIndex, storage: Array[Int] ) extends CDArray[I
 
 class CDShortArray( cdIndex: CDCoordIndex, storage: Array[Short] ) extends CDArray[Short](cdIndex,storage) {
 
-  def getData: Array[Short] = storage.asInstanceOf[Array[Short]]
+  protected def getData: Array[Short] = storage.asInstanceOf[Array[Short]]
   def getInvalid: Short = Short.MinValue
 
   def this( shape: Array[Int], storage: Array[Short] ) = this( CDCoordIndex.factory(shape), storage )
@@ -426,7 +426,7 @@ object CDDoubleArray {
 
 class CDDoubleArray( cdIndex: CDCoordIndex, storage: Array[Double], protected val invalid: Double ) extends CDArray[Double](cdIndex,storage) {
 
-  def getData: Array[Double] = storage.asInstanceOf[Array[Double]]
+  protected def getData: Array[Double] = storage.asInstanceOf[Array[Double]]
   def getInvalid = invalid
 
   def this( shape: Array[Int], storage: Array[Double], invalid: Double ) = this( CDCoordIndex.factory(shape), storage, invalid )
@@ -499,7 +499,7 @@ object ArrayPerformanceTest extends App {
   itest match {
     case 0 =>
       val t00 = System.nanoTime
-      val cdResult = for (index <- cd_array.getIterator; value = cd_array.getData (index) ) yield {
+      val cdResult = for (index <- cd_array.getIterator; value = cd_array.getFlatValue (index) ) yield {
         value * value
       }
       val cdResultData = cdResult.toArray
