@@ -66,11 +66,12 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndex: CDCoordIndex, privat
   def getShape: Array[Int] = cdIndex.getShape
   def getStride: Array[Int] = cdIndex.getStride
   def getReducedShape: Array[Int] = cdIndex.getReducedShape
-  def getFlatValue( index: Int ): T = storage(index)
-  def getValue( indices: Array[Int] ): T = storage( cdIndex.getFlatIndex(indices) )
-  def getValue( index: Int ): T = getValue( Array(index) )
-  def setFlatValue( index: Int, value: T ): Unit = { storage(index) = value }
-  def setValue( indices: Array[Int], value: T ): Unit = { storage( cdIndex.getFlatIndex(indices) ) = value }
+  protected def getStorageValue( index: Int ): T = storage(index)
+  def getValue( indices: Array[Int] ): T = storage( cdIndex.getStorageIndex(indices) )
+  def getFlatValue( index: Int ): T = storage( getIterator.mapToSection(index) )
+  protected def setStorageValue( index: Int, value: T ): Unit = { storage(index) = value }
+  def setValue( indices: Array[Int], value: T ): Unit = { storage( cdIndex.getStorageIndex(indices) ) = value }
+  def setFlatValue( index: Int, value: T  ): Unit = storage( getIterator.mapToSection(index) ) = value
   def getSize: Int =  cdIndex.getSize
   def getSizeBytes: Int =  cdIndex.getSize * dataType.getSize
   def getRangeIterator(ranges: List[ma2.Range] ): CDIterator = section(ranges).getIterator
@@ -95,12 +96,12 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndex: CDCoordIndex, privat
     val iter = getIterator
     coordMapOpt match {
       case Some(coordMap) =>
-        for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) {
+        for (index <- iter; array_value = getStorageValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) {
           val mappedCoords = coordMap.map(coordIndices)
           accumulator.setValue(mappedCoords, reductionOp(accumulator.getValue(mappedCoords), array_value))
         }
       case None =>
-        for (index <- iter; array_value = getFlatValue(index); coordIndices = iter.getCoordinateIndices) {
+        for (index <- iter; array_value = getStorageValue(index); coordIndices = iter.getCoordinateIndices) {
           if( valid(array_value) ) {
             val reduced_value = reductionOp(accumulator.getValue(coordIndices), array_value)
             accumulator.setValue(coordIndices, reduced_value)
@@ -204,7 +205,7 @@ object CDFloatArray {
     assert( input0.getShape.sameElements(input1.getShape), "Can't combine arrays with different shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",")))
     val sameStructure = input0.getStride.sameElements(input1.getStride)
     val iter = input0.getIterator
-    val result = for (flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); v1 = if(sameStructure) input1.getFlatValue(flatIndex) else input1.getValue( iter.getCoordinateIndices ) ) yield
+    val result = for (flatIndex <- iter; v0 = input0.getStorageValue(flatIndex); v1 = if(sameStructure) input1.getStorageValue(flatIndex) else input1.getValue( iter.getCoordinateIndices ) ) yield
         if (!input0.valid(v0)) input0.invalid else if (!input1.valid(v1)) input0.invalid else reductionOp(v0, v1)
     new CDFloatArray( input0.getShape, result.toArray, input0.invalid )
   }
@@ -213,13 +214,13 @@ object CDFloatArray {
     assert( input0.getShape.sameElements(input1.getShape), "Can't combine arrays with different shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",")))
     val sameStructure = input0.getStride.sameElements(input1.getStride)
     val iter = input0.getIterator
-    for (flatIndex <- iter; v0 = input0.getFlatValue(flatIndex); if (input0.valid(v0)); v1 = if(sameStructure) input1.getFlatValue(flatIndex) else input1.getValue( iter.getCoordinateIndices ); if (input1.valid(v1))) {
-      input0.setFlatValue(flatIndex, reductionOp(v0, v1))
+    for (flatIndex <- iter; v0 = input0.getStorageValue(flatIndex); if (input0.valid(v0)); v1 = if(sameStructure) input1.getStorageValue(flatIndex) else input1.getValue( iter.getCoordinateIndices ); if (input1.valid(v1))) {
+      input0.setStorageValue(flatIndex, reductionOp(v0, v1))
     }
   }
 
   def combine( reductionOp: ReduceOpFlt, input0: CDFloatArray, fval: Float ): CDFloatArray = {
-    val result = for( flatIndex <- input0.getIterator; v0 = input0.getFlatValue(flatIndex) ) yield
+    val result = for( flatIndex <- input0.getIterator; v0 = input0.getStorageValue(flatIndex) ) yield
       if( !input0.valid( v0 ) ) input0.invalid
       else reductionOp(v0,fval)
     new CDFloatArray( input0.getShape, result.toArray, input0.invalid )
@@ -275,6 +276,15 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   def min(reduceDims: Array[Int]): CDFloatArray = reduce( minOp, reduceDims, Float.MaxValue )
   def sum(reduceDims: Array[Int]): CDFloatArray = reduce( addOp, reduceDims, 0f )
 
+  def augmentFlat( flat_index: Int, value: Float, opName: String = "add"  ): Unit = {
+    val storageIndex = getIterator.mapToSection( flat_index )
+    storage( storageIndex ) = getOp(opName)( storage( storageIndex ), value )
+  }
+  def augment( coord_indices: Array[Int], value: Float, opName: String = "add"  ): Unit = {
+    val storageIndex = cdIndex.getStorageIndex( coord_indices )
+    storage( storageIndex ) = getOp(opName)( storage( storageIndex ), value )
+  }
+
   def weightedReduce( reductionOp: ReduceOpFlt, reduceDims: Array[Int], initVal: Float, weightsOpt: Option[CDFloatArray] = None, coordMapOpt: Option[CDCoordMap] = None ): ( CDFloatArray, CDFloatArray ) = {
     val fullShape = coordMapOpt match { case Some(coordMap) => coordMap.mapShape( getShape ); case None => getShape }
     val bcastReductionDims = coordMapOpt match { case None => reduceDims; case Some( coordMap ) => reduceDims.filterNot( _ == coordMap.dimIndex ) }
@@ -283,7 +293,7 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
     val iter = getIterator
     coordMapOpt match {
       case Some(coordMap) =>
-        for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
+        for (index <- iter; array_value = getStorageValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
           case Some(weights) =>
             val weight = weights.getValue(coordIndices);
             val mappedCoords = coordMap.map(coordIndices)
@@ -295,7 +305,7 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
             weights_accumulator.setValue(mappedCoords, weights_accumulator.getValue(mappedCoords) + 1f)
         }
       case None =>
-        for (index <- iter; array_value = getFlatValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
+        for (index <- iter; array_value = getStorageValue(index); if valid(array_value); coordIndices = iter.getCoordinateIndices) weightsOpt match {
           case Some(weights) =>
             val weight = weights.getValue(coordIndices)
             value_accumulator.setValue(coordIndices, reductionOp(value_accumulator.getValue(coordIndices), array_value * weight))
@@ -318,6 +328,11 @@ class CDFloatArray( cdIndex: CDCoordIndex, storage: Array[Float], protected val 
   def anomaly( reduceDims: Array[Int], weightsOpt: Option[CDFloatArray] = None ): CDFloatArray = {
     val meanval: CDFloatArray = mean( reduceDims, weightsOpt )
     this - meanval.broadcast( getShape )
+  }
+
+  def flat_array_square_profile(): CDFloatArray = {
+    val cdResult = for (index <- getIterator; value = getStorageValue(index) ) yield value * value
+    new CDFloatArray( getShape, cdResult.toArray, invalid )
   }
 
 //  if (weightsOpt.isDefined) assert( getShape.sameElements(weightsOpt.get.getShape), " Weight array in mean op has wrong shape: (%s) vs. (%s)".format( weightsOpt.get.getShape.mkString(","), getShape.mkString(",") ))
@@ -500,10 +515,7 @@ object ArrayPerformanceTest extends App {
   itest match {
     case 0 =>
       val t00 = System.nanoTime
-      val cdResult = for (index <- cd_array.getIterator; value = cd_array.getFlatValue (index) ) yield {
-        value * value
-      }
-      val cdResultData = cdResult.toArray
+      val cdResult = cd_array.flat_array_square_profile()
       val t01 = System.nanoTime
       println ("cd2Result Time = %.4f,  ".format ((t01 - t00) / 1.0E9) )
 

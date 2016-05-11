@@ -34,8 +34,9 @@ abstract class CDIterator( _cdIndex: CDCoordIndex  ) extends collection.Iterator
   def getCoordinateIndices: Array[Int]
   def getIndex: Int
   def initialize: Unit
+  def mapToSection( index: Int ): Int = { setCurrentCounter(index); currentElement }
 
-  protected def currentElement: Int = cdIndex.getFlatIndex( coordIndices )
+  protected def currentElement: Int = cdIndex.getStorageIndex( coordIndices )
   protected def getCoordIndices: Array[Int] = coordIndices.clone
 
   protected def setCurrentCounter( _currElement: Int ) {
@@ -46,6 +47,7 @@ abstract class CDIterator( _cdIndex: CDCoordIndex  ) extends collection.Iterator
       currElement -= coordIndices(ii) * stride(ii)
     }
   }
+
 
   protected def incr: Int = {
     for( digit <-(rank  - 1 to 0 by -1) ) if (shape(digit) < 0) { coordIndices(digit) = -1 } else {

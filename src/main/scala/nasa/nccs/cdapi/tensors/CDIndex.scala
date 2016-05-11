@@ -47,7 +47,8 @@ class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.e
     }
   }
 
-  def getFlatIndex( coordIndices: Array[Int] ): Int = {
+  def getStorageIndex( coordIndices: Array[Int] ): Int = {
+    assert( coordIndices.length == rank, "Wrong number of coordinates in getStorageIndex for Array of rank %d: %d".format( rank, coordIndices.length) )
     var value: Int = offset
     for( ii <-(0 until rank ); if (shape(ii) >= 0) ) {
       value += coordIndices(ii) * stride(ii)
@@ -203,12 +204,12 @@ object CDTimeCoordMap {
             } else {
               val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
               val binIndices: Array[Int] =  timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Month)-1 + cdate.getFieldValue(Year) - year_offset ).toArray
-              new CDCoordArrayMap( dimIndex, coordinateAxis.getShape(0)/12, binIndices )
+              new CDCoordArrayMap( dimIndex, Math.ceil(coordinateAxis.getShape(0)/12.0).toInt, binIndices )
             }
           case "year" =>
             val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
             val binIndices: Array[Int] =  timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Year) - year_offset ).toArray
-            new CDCoordArrayMap( dimIndex, coordinateAxis.getShape(0)/12, binIndices )
+            new CDCoordArrayMap( dimIndex, Math.ceil(coordinateAxis.getShape(0)/12.0).toInt, binIndices )
           case x => throw new Exception("Binning not yet implemented for this step type: %s".format(step))
         }
       case x => throw new Exception("Binning not yet implemented for this axis type: %s".format(x.getClass.getName))
