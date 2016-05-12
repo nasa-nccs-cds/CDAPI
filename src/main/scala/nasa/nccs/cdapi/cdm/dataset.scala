@@ -27,13 +27,6 @@ class Collection( val ctype: String, val url: String, val vars: List[String] = L
   override def toString = "Collection( type=%s, url=%s, vars=(%s))".format( ctype, url, vars.mkString(",") )
 }
 
-object Mask {
-  def apply( mtype: String, url: String ) = { new Mask(mtype,url) }
-}
-class Mask( val mtype: String, val url: String ) {
-  override def toString = "Collection( mtype=%s, url=%s )".format( mtype, url )
-}
-
 object CDSDataset {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
