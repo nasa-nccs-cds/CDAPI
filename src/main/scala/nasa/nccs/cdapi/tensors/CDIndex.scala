@@ -12,16 +12,16 @@ import ucar.nc2.time.CalendarPeriod.Field._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
-object CDCoordIndexMap {
+object CDIndexMap {
 
-  def factory(index: CDCoordIndexMap): CDCoordIndexMap = new CDCoordIndexMap(index.getShape, index.getStride, index.getOffset )
-  def factory(shape: Array[Int], stride: Array[Int]=Array.emptyIntArray, offset: Int = 0): CDCoordIndexMap = new CDCoordIndexMap(shape, stride, offset )
+  def factory(index: CDIndexMap): CDIndexMap = new CDIndexMap(index.getShape, index.getStride, index.getOffset )
+  def factory(shape: Array[Int], stride: Array[Int]=Array.emptyIntArray, offset: Int = 0): CDIndexMap = new CDIndexMap(shape, stride, offset )
 }
 
-class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyIntArray, protected val offset: Int = 0 ) {
+class CDIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyIntArray, protected val offset: Int = 0 ) {
   protected val rank: Int = shape.length
   protected val stride = if( _stride.isEmpty ) computeStrides(shape) else _stride
-  def this( index: CDCoordIndexMap ) = this( index.shape, index.stride, index.offset )
+  def this( index: CDIndexMap ) = this( index.shape, index.stride, index.offset )
 
   def getRank: Int = rank
   def getShape: Array[Int] = shape.clone
@@ -67,18 +67,18 @@ class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Arra
     return strides.reverse.toArray
   }
 
-  def flip(index: Int): CDCoordIndexMap = {
+  def flip(index: Int): CDIndexMap = {
     assert ( (index >= 0) && (index < rank), "Illegal rank index: " +  index )
     val new_index = if (shape(index) >= 0) {
       val _offset = offset + stride(index) * (shape(index) - 1)
       val _stride = stride.clone
       _stride(index) = -stride(index)
-      new CDCoordIndexMap( shape, _stride, _offset )
-    } else new CDCoordIndexMap( this )
+      new CDIndexMap( shape, _stride, _offset )
+    } else new CDIndexMap( this )
     return new_index
   }
 
-  def section( ranges: List[ma2.Range] ): CDCoordIndexMap = {
+  def section( ranges: List[ma2.Range] ): CDIndexMap = {
     assert(ranges.size == rank, "Bad ranges [] length")
     for( ii <-(0 until rank); r = ranges(ii); if ((r != null) && (r != ma2.Range.VLEN)) ) {
       assert ((r.first >= 0) && (r.first < shape(ii)), "Bad range starting value at index " + ii + " == " + r.first)
@@ -98,19 +98,19 @@ class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Arra
         _offset += stride(ii) * r.first
       }
     }
-    CDCoordIndexMap.factory( _shape, _stride, _offset )
+    CDIndexMap.factory( _shape, _stride, _offset )
   }
 
-  def reduce: CDCoordIndexMap = {
-    val c: CDCoordIndexMap = this
+  def reduce: CDIndexMap = {
+    val c: CDIndexMap = this
     for( ii <-(0 until rank); if (shape(ii) == 1) ) {
-        val newc: CDCoordIndexMap = c.reduce(ii)
+        val newc: CDIndexMap = c.reduce(ii)
         return newc.reduce
     }
     return c
   }
 
-  def reduce(dim: Int): CDCoordIndexMap = {
+  def reduce(dim: Int): CDIndexMap = {
     assert((dim >= 0) && (dim < rank), "illegal reduce dim " + dim )
     assert( (shape(dim) == 1), "illegal reduce dim " + dim + " : length != 1" )
     val _shape = ListBuffer[Int]()
@@ -119,10 +119,10 @@ class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Arra
         _shape.append( shape(ii) )
         _stride.append( stride(ii) )
     }
-    CDCoordIndexMap.factory( _shape.toArray, _stride.toArray, offset )
+    CDIndexMap.factory( _shape.toArray, _stride.toArray, offset )
   }
 
-  def transpose(index1: Int, index2: Int): CDCoordIndexMap = {
+  def transpose(index1: Int, index2: Int): CDIndexMap = {
     assert((index1 >= 0) && (index1 < rank), "illegal index in transpose " + index1 )
     assert((index2 >= 0) && (index2 < rank), "illegal index in transpose " + index1 )
     val _shape = shape.clone()
@@ -131,10 +131,10 @@ class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Arra
     _stride(index2) = stride(index1)
     _shape(index1) = shape(index2)
     _shape(index2) = shape(index1)
-    CDCoordIndexMap.factory( _shape, _stride, offset )
+    CDIndexMap.factory( _shape, _stride, offset )
   }
 
-  def permute(dims: Array[Int]): CDCoordIndexMap = {
+  def permute(dims: Array[Int]): CDIndexMap = {
     assert( (dims.length == shape.length), "illegal shape in permute " + dims )
     for (dim <- dims) if ((dim < 0) || (dim >= rank)) throw new Exception( "illegal shape in permute " + dims )
     val _shape = ListBuffer[Int]()
@@ -143,19 +143,19 @@ class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Arra
       _stride.append( stride(dims(i) ) )
       _shape.append( shape(dims(i)) )
     }
-    CDCoordIndexMap.factory( _shape.toArray, _stride.toArray, offset )
+    CDIndexMap.factory( _shape.toArray, _stride.toArray, offset )
   }
 
-  def broadcast(  dim: Int, size: Int ): CDCoordIndexMap = {
+  def broadcast(  dim: Int, size: Int ): CDIndexMap = {
     assert( shape(dim) == 1, "Can't broadcast a dimension with size > 1" )
     val _shape = shape.clone()
     val _stride = stride.clone()
     _shape(dim) = size
     _stride(dim) = 0
-    CDCoordIndexMap.factory( _shape, _stride, offset )
+    CDIndexMap.factory( _shape, _stride, offset )
   }
 
-  def broadcast( bcast_shape: Array[Int] ): CDCoordIndexMap = {
+  def broadcast( bcast_shape: Array[Int] ): CDIndexMap = {
     assert ( bcast_shape.length == rank, "Can't broadcast shape (%s) to (%s)".format( shape.mkString(","), bcast_shape.mkString(",") ) )
     val _shape = shape.clone()
     val _stride = stride.clone()
@@ -164,19 +164,18 @@ class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Arra
       _shape(idim) = bsize
       _stride(idim) = 0
     }
-    CDCoordIndexMap.factory( _shape, _stride, offset )
+    CDIndexMap.factory( _shape, _stride, offset )
   }
-
 }
 
-trait CDCoordMap {
+trait CDCoordMapBase {
   def dimIndex: Int
   val nBins: Int
   def map( coordIndices: Array[Int] ): Array[Int]
   def mapShape( shape: Array[Int] ): Array[Int] = { val new_shape=shape.clone; new_shape(dimIndex)=nBins; new_shape }
 }
 
-class CDCoordArrayMap( val dimIndex: Int, val nBins: Int, val mapArray: Array[Int] ) extends CDCoordMap {
+class CDCoordMap( val dimIndex: Int, val nBins: Int, val mapArray: Array[Int] ) extends CDCoordMapBase {
   def map( coordIndices: Array[Int] ): Array[Int] = {
     val result = coordIndices.clone()
     result( dimIndex ) = mapArray( coordIndices(dimIndex) )
@@ -187,7 +186,7 @@ class CDCoordArrayMap( val dimIndex: Int, val nBins: Int, val mapArray: Array[In
 object CDTimeCoordMap {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
 
-  def getTimeCycleMap( step: String, cycle: String, variable: CDSVariable ): CDCoordArrayMap = {
+  def getTimeCycleMap( step: String, cycle: String, variable: CDSVariable ): CDCoordMap = {
     val dimIndex: Int = variable.getAxisIndex( 't' )
     val coordinateAxis: CoordinateAxis1D = variable.dataset.getCoordinateAxis( 't' ) match {
       case caxis: CoordinateAxis1D => caxis;
@@ -200,16 +199,16 @@ object CDTimeCoordMap {
         step match {
           case "month" =>
             if (cycle == "year") {
-              new CDCoordArrayMap( dimIndex, 12, timeAxis.getCalendarDates.map( _.getFieldValue(Month)-1 ).toArray )
+              new CDCoordMap( dimIndex, 12, timeAxis.getCalendarDates.map( _.getFieldValue(Month)-1 ).toArray )
             } else {
               val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
               val binIndices: Array[Int] =  timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Month)-1 + cdate.getFieldValue(Year) - year_offset ).toArray
-              new CDCoordArrayMap( dimIndex, Math.ceil(coordinateAxis.getShape(0)/12.0).toInt, binIndices )
+              new CDCoordMap( dimIndex, Math.ceil(coordinateAxis.getShape(0)/12.0).toInt, binIndices )
             }
           case "year" =>
             val year_offset = timeAxis.getCalendarDate(0).getFieldValue(Year)
             val binIndices: Array[Int] =  timeAxis.getCalendarDates.map( cdate => cdate.getFieldValue(Year) - year_offset ).toArray
-            new CDCoordArrayMap( dimIndex, Math.ceil(coordinateAxis.getShape(0)/12.0).toInt, binIndices )
+            new CDCoordMap( dimIndex, Math.ceil(coordinateAxis.getShape(0)/12.0).toInt, binIndices )
           case x => throw new Exception("Binning not yet implemented for this step type: %s".format(step))
         }
       case x => throw new Exception("Binning not yet implemented for this axis type: %s".format(x.getClass.getName))

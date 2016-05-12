@@ -86,7 +86,7 @@ class ServerContext( val dataLoader: DataLoader, private val configuration: Map[
     val baseFragment = dataLoader.getFragment( fragSpec )
     val t1 = System.nanoTime
     val variable = getVariable( fragSpec )
-    val newFragmentSpec = variable.createFragmentSpec( new_domain_container.axes )
+    val newFragmentSpec = variable.createFragmentSpec( new_domain_container )
     val rv = baseFragment.cutIntersection( newFragmentSpec.roi )
     val t2 = System.nanoTime
     logger.info( " GetSubsetT: %.4f %.4f".format( (t1-t0)/1.0E9, (t2-t1)/1.0E9 ) )
@@ -117,7 +117,7 @@ class ServerContext( val dataLoader: DataLoader, private val configuration: Map[
     val t2 = System.nanoTime
     val fragmentSpec = domain_container_opt match {
       case Some(domain_container) =>
-        val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container.axes)
+        val fragmentSpec: DataFragmentSpec = variable.createFragmentSpec(domain_container)
         dataLoader.getFragment( fragmentSpec, 0.3f )
         fragmentSpec
       case None => variable.createFragmentSpec()

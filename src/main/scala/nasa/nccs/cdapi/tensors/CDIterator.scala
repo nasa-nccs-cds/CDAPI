@@ -5,9 +5,9 @@ import nasa.nccs.cdapi.tensors.CDArray.{StorageIndex,FlatIndex}
 
 object CDIterator {
 
-  def factory( shape: Array[Int] ): CDArrayIndexIterator = factory( CDCoordIndexMap.factory(shape) )
+  def factory( shape: Array[Int] ): CDArrayIndexIterator = factory( CDIndexMap.factory(shape) )
 
-  def factory( cdIndexMap: CDCoordIndexMap ): CDArrayIndexIterator = cdIndexMap.getRank match {
+  def factory( cdIndexMap: CDIndexMap ): CDArrayIndexIterator = cdIndexMap.getRank match {
     case 1 =>
       return new CDIndexIterator1D(cdIndexMap)
     case 2 =>
@@ -23,8 +23,8 @@ object CDIterator {
   }
 }
 
-abstract class CDIterator( _cdIndexMap: CDCoordIndexMap  ) extends collection.Iterator[Int] {
-  protected val cdIndexMap: CDCoordIndexMap = CDCoordIndexMap.factory( _cdIndexMap )
+abstract class CDIterator( _cdIndexMap: CDIndexMap  ) extends collection.Iterator[Int] {
+  protected val cdIndexMap: CDIndexMap = CDIndexMap.factory( _cdIndexMap )
   protected val rank = cdIndexMap.getRank
   protected val stride = cdIndexMap.getStride
   protected val shape = cdIndexMap.getShape
@@ -153,7 +153,7 @@ abstract class CDIterator( _cdIndexMap: CDCoordIndexMap  ) extends collection.It
   }
 }
 
-class CDArrayIndexIterator( cdIndexMap: CDCoordIndexMap  ) extends CDIterator(cdIndexMap) {
+class CDArrayIndexIterator( cdIndexMap: CDIndexMap  ) extends CDIterator(cdIndexMap) {
   private var count: Int = 0
   private var currElement: StorageIndex = currentElement
   private var numElem = cdIndexMap.getSize
@@ -169,7 +169,7 @@ class CDArrayIndexIterator( cdIndexMap: CDCoordIndexMap  ) extends CDIterator(cd
   def initialize: Unit = {}
 }
 
-class CDStorageIndexIterator( cdIndexMap: CDCoordIndexMap  ) extends CDIterator(cdIndexMap) {
+class CDStorageIndexIterator( cdIndexMap: CDIndexMap  ) extends CDIterator(cdIndexMap) {
   private var count: Int = -1
   private var countBound = cdIndexMap.getSize - 1
 
@@ -184,7 +184,7 @@ class CDStorageIndexIterator( cdIndexMap: CDCoordIndexMap  ) extends CDIterator(
 }
 
 
-class CDIndexIterator1D( cdIndexMap: CDCoordIndexMap ) extends  CDArrayIndexIterator( cdIndexMap  ) {
+class CDIndexIterator1D( cdIndexMap: CDIndexMap ) extends  CDArrayIndexIterator( cdIndexMap  ) {
   private var curr0: Int = coordIndices(0)
   private var stride0: Int = stride(0)
   private var shape0: Int = shape(0)
@@ -237,7 +237,7 @@ class CDIndexIterator1D( cdIndexMap: CDCoordIndexMap ) extends  CDArrayIndexIter
   }
 }
 
-class CDIndexIterator2D( cdIndexMap: CDCoordIndexMap ) extends  CDArrayIndexIterator( cdIndexMap  ) {
+class CDIndexIterator2D( cdIndexMap: CDIndexMap ) extends  CDArrayIndexIterator( cdIndexMap  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var stride0: Int = stride(0)
@@ -319,7 +319,7 @@ class CDIndexIterator2D( cdIndexMap: CDCoordIndexMap ) extends  CDArrayIndexIter
 }
 
 
-class CDIndexIterator3D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator3D( index: CDIndexMap ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -419,7 +419,7 @@ class CDIndexIterator3D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator(
   }
 }
 
-class CDIndexIterator4D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator4D( index: CDIndexMap ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -547,7 +547,7 @@ class CDIndexIterator4D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator(
 }
 
 
-class CDIndexIterator5D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator5D( index: CDIndexMap ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -702,7 +702,7 @@ object DualArrayIterator {
       else if ( s1 == 1 ) s0
       else throw new Exception( "Attempt to combine incummensurate shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",") ) ) ).toArray
 
-    val cdIndexMap = CDCoordIndexMap.factory(shape)
+    val cdIndexMap = CDIndexMap.factory(shape)
     val sameShape0 = input0.getShape.sameElements(shape)
     val sameShape1 = input1.getShape.sameElements(shape)
     val array0 = if(sameShape0) input0 else input0.broadcast(shape)
@@ -711,7 +711,7 @@ object DualArrayIterator {
   }
 }
 
-class DualArrayIterator( val array0: CDFloatArray, val array1: CDFloatArray, cdIndexMap: CDCoordIndexMap ) extends CDArrayIndexIterator( cdIndexMap  ) {
+class DualArrayIterator( val array0: CDFloatArray, val array1: CDFloatArray, cdIndexMap: CDIndexMap ) extends CDArrayIndexIterator( cdIndexMap  ) {
   val sameStructure0 = checkArrayStructure( 0 )
   val sameStructure1 = checkArrayStructure( 1 )
   var storageIndex: StorageIndex = 0

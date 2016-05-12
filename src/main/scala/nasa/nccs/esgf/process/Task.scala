@@ -228,10 +228,15 @@ object DataFragmentSpec {
   }
 }
 
-class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val units: String="", val longname: String="", val roi: ma2.Section = new ma2.Section(), val partitions: Array[PartitionSpec]= Array() )  {
+class DataFragmentSpec( val varname: String="", val collection: String="", val dimensions: String="", val units: String="", val longname: String="", val roi: ma2.Section = new ma2.Section(), val mask: Option[String] = None, val partitions: Array[PartitionSpec]= Array() )  {
   override def toString =  "DataFragmentSpec { varname = %s, collection = %s, dimensions = %s, units = %s, longname = %s, roi = %s, partitions = [ %s ] }".format( varname, collection, dimensions, units, longname, roi.toString, partitions.map(_.toString).mkString(", "))
   def sameVariable( otherCollection: String, otherVarName: String ): Boolean = { (varname == otherVarName) && (collection == otherCollection) }
-  def toXml = { <input collection={collection} varname={varname} longname={longname} units={units} roi={roi.toString}/> }
+  def toXml = {
+    mask match {
+      case None => <input collection={collection} varname={varname} longname={longname} units={units} roi={roi.toString} />
+      case Some(maskId) => <input collection={collection} varname={varname} longname={longname} units={units} roi={roi.toString} mask={maskId} />
+    }
+  }
 
   private def collapse( range: ma2.Range, newsize: Int = 1 ): ma2.Range = newsize match {
     case 1 => val mid_val = (range.first+range.last)/2; new ma2.Range(range.getName,mid_val,mid_val)
@@ -253,7 +258,7 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
   def getKeyString: String = getKey.toString
 
   def cutIntersection( cutSection: ma2.Section ): DataFragmentSpec =
-    new DataFragmentSpec( varname, collection, dimensions, units, longname, roi.intersect(cutSection), partitions )
+    new DataFragmentSpec( varname, collection, dimensions, units, longname, roi.intersect(cutSection), mask, partitions )
 
   def getReducedSection( axisIndices: Set[Int], newsize: Int = 1 ): ma2.Section = {
     new ma2.Section( roi.getRanges.zipWithIndex.map( rngIndx => if( axisIndices(rngIndx._2) ) collapse( rngIndx._1, newsize ) else rngIndx._1 ):_* )
@@ -289,7 +294,7 @@ class DataFragmentSpec( val varname: String="", val collection: String="", val d
   }
 
   def reSection( newSection: ma2.Section ): DataFragmentSpec = {
-    new DataFragmentSpec( varname, collection, dimensions, units, longname, newSection, partitions )
+    new DataFragmentSpec( varname, collection, dimensions, units, longname, newSection, mask, partitions )
   }
 
 //  private var dataFrag: Option[PartitionedFragment] = None
@@ -375,13 +380,14 @@ object DataContainer extends ContainerBase {
   }
 }
 
-class DomainContainer( val name: String, val axes: List[DomainAxis] ) extends ContainerBase {
+class DomainContainer( val name: String, val axes: List[DomainAxis], val mask: Option[String] ) extends ContainerBase {
   override def toString = {
     s"DomainContainer { name = $name, axes = $axes }"
   }
   override def toXml = {
     <domain name={name}>
       <axes> { axes.map( _.toXml ) } </axes>
+      { mask match { case None => Unit; case Some(maskId) => <mask> { maskId } </mask> } }
     </domain>
   }
 }
@@ -439,7 +445,8 @@ object DomainContainer extends ContainerBase {
       items += DomainAxis( DomainAxis.Type.X,   filterMap(metadata,  key_equals( wpsNameMatchers.xAxis )))
       items += DomainAxis( DomainAxis.Type.Z,   filterMap(metadata,  key_equals( wpsNameMatchers.zAxis )))
       items += DomainAxis( DomainAxis.Type.T,   filterMap(metadata,  key_equals( wpsNameMatchers.tAxis )))
-      new DomainContainer( normalize(name.toString), items.flatten.toList )
+      val mask: Option[String] = filterMap(metadata, key_equals("mask")) match { case None => None; case Some(x) => Some(x.toString) }
+      new DomainContainer( normalize(name.toString), items.flatten.toList, mask )
     } catch {
       case e: Exception =>
         logger.error("Error creating DomainContainer: " + e.getMessage )

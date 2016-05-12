@@ -209,14 +209,16 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
     new ma2.Section( shape )
   }
 
-  def createFragmentSpec( roi: List[DomainAxis], partIndex: Int=0, partAxis: Char='*', nPart: Int=1 ) = {
+  def createFragmentSpec( domainContainer: DomainContainer, partIndex: Int=0, partAxis: Char='*', nPart: Int=1 ) = {
+    val roi: List[DomainAxis] = domainContainer.axes
+    val mask = domainContainer.mask
     val partitions = if ( partAxis == '*' ) List.empty[PartitionSpec] else {
       val partitionAxis = dataset.getCoordinateAxis(partAxis)
       val partAxisIndex = ncVariable.findDimensionIndex(partitionAxis.getShortName)
       assert(partAxisIndex != -1, "CDS2-CDSVariable: Can't find axis %s in variable %s".format(partitionAxis.getShortName, ncVariable.getNameAndDimensions))
       List( new PartitionSpec(partAxisIndex, nPart, partIndex) )
     }
-    new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), ncVariable.getUnitsString, getAttributeValue( "long_name", ncVariable.getFullName ), getSubSection(roi), partitions.toArray )
+    new DataFragmentSpec( name, dataset.name, ncVariable.getDimensionsString(), ncVariable.getUnitsString, getAttributeValue( "long_name", ncVariable.getFullName ), getSubSection(roi), mask, partitions.toArray )
   }
 
   def createFragmentSpec() = new DataFragmentSpec( name, dataset.name )
