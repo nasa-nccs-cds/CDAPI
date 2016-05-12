@@ -1,47 +1,49 @@
 // Based on ucar.ma2.IndexIterator, portions of which were developed by the Unidata Program at the University Corporation for Atmospheric Research.
 
 package nasa.nccs.cdapi.tensors
+import nasa.nccs.cdapi.tensors.CDArray.{StorageIndex,FlatIndex}
 
 object CDIterator {
 
-  def factory( shape: Array[Int] ): CDArrayIndexIterator = factory( CDCoordIndex.factory(shape) )
+  def factory( shape: Array[Int] ): CDArrayIndexIterator = factory( CDCoordIndexMap.factory(shape) )
 
-  def factory( cdIndex: CDCoordIndex ): CDArrayIndexIterator = cdIndex.getRank match {
+  def factory( cdIndexMap: CDCoordIndexMap ): CDArrayIndexIterator = cdIndexMap.getRank match {
     case 1 =>
-      return new CDIndexIterator1D(cdIndex)
+      return new CDIndexIterator1D(cdIndexMap)
     case 2 =>
-      return new CDIndexIterator2D(cdIndex)
+      return new CDIndexIterator2D(cdIndexMap)
     case 3 =>
-      return new CDIndexIterator3D(cdIndex)
+      return new CDIndexIterator3D(cdIndexMap)
     case 4 =>
-      return new CDIndexIterator4D(cdIndex)
+      return new CDIndexIterator4D(cdIndexMap)
     case 5 =>
-      return new CDIndexIterator5D(cdIndex)
+      return new CDIndexIterator5D(cdIndexMap)
     case _ =>
-      return new CDArrayIndexIterator(cdIndex)
+      return new CDArrayIndexIterator(cdIndexMap)
   }
 }
 
-abstract class CDIterator( _cdIndex: CDCoordIndex  ) extends collection.Iterator[Int] {
-  protected val cdIndex: CDCoordIndex = CDCoordIndex.factory( _cdIndex )
-  protected val rank = cdIndex.getRank
-  protected val stride = cdIndex.getStride
-  protected val shape = cdIndex.getShape
-  protected val offset = cdIndex.getOffset
-  protected var coordIndices: Array[Int] = new Array[Int]( cdIndex.getRank )
+abstract class CDIterator( _cdIndexMap: CDCoordIndexMap  ) extends collection.Iterator[Int] {
+  protected val cdIndexMap: CDCoordIndexMap = CDCoordIndexMap.factory( _cdIndexMap )
+  protected val rank = cdIndexMap.getRank
+  protected val stride = cdIndexMap.getStride
+  protected val shape = cdIndexMap.getShape
+  protected val offset = cdIndexMap.getOffset
+  protected var coordIndices: Array[Int] = new Array[Int]( cdIndexMap.getRank )
   protected val hasvlen: Boolean = (shape.length > 0 && shape(shape.length - 1) < 0)
 
   def hasNext: Boolean
-  def next(): Int
+  def next(): StorageIndex
   def getCoordinateIndices: Array[Int]
-  def getIndex: Int
+  def getIndex: StorageIndex
+  def getShape = cdIndexMap.getShape
   def initialize: Unit
-  def mapToSection( index: Int ): Int = { setCurrentCounter(index); currentElement }
+  def flatToStorage( index: FlatIndex ): StorageIndex = { setCurrentCounter(index); currentElement }
 
-  protected def currentElement: Int = cdIndex.getStorageIndex( coordIndices )
+  protected def currentElement: StorageIndex = cdIndexMap.getStorageIndex( coordIndices )
   protected def getCoordIndices: Array[Int] = coordIndices.clone
 
-  protected def setCurrentCounter( _currElement: Int ) {
+  protected def setCurrentCounter( _currElement: FlatIndex ) {
     var currElement = _currElement
     currElement -= offset
     for( ii <-(0 until rank ) ) if (shape(ii) < 0) { coordIndices(ii) = -1 } else {
@@ -51,7 +53,7 @@ abstract class CDIterator( _cdIndex: CDCoordIndex  ) extends collection.Iterator
   }
 
 
-  protected def incr: Int = {
+  protected def incr: StorageIndex = {
     for( digit <-(rank  - 1 to 0 by -1) ) if (shape(digit) < 0) { coordIndices(digit) = -1 } else {
       coordIndices(digit) += 1
       if (coordIndices(digit) < shape(digit)) return currentElement
@@ -151,25 +153,25 @@ abstract class CDIterator( _cdIndex: CDCoordIndex  ) extends collection.Iterator
   }
 }
 
-class CDArrayIndexIterator( cdIndex: CDCoordIndex  ) extends CDIterator(cdIndex) {
+class CDArrayIndexIterator( cdIndexMap: CDCoordIndexMap  ) extends CDIterator(cdIndexMap) {
   private var count: Int = 0
-  private var currElement: Int = currentElement
-  private var numElem = cdIndex.getSize
+  private var currElement: StorageIndex = currentElement
+  private var numElem = cdIndexMap.getSize
 
   def hasNext: Boolean = ( count < numElem )
-  def next(): Int = {
+  def next(): StorageIndex = {
     if(count>0) { currElement = incr }
     count += 1
     currElement
   }
   def getCoordinateIndices: Array[Int] = getCoordIndices
-  def getIndex: Int =  currElement
+  def getIndex: StorageIndex =  currElement
   def initialize: Unit = {}
 }
 
-class CDStorageIndexIterator( cdIndex: CDCoordIndex  ) extends CDIterator(cdIndex) {
+class CDStorageIndexIterator( cdIndexMap: CDCoordIndexMap  ) extends CDIterator(cdIndexMap) {
   private var count: Int = -1
-  private var countBound = cdIndex.getSize - 1
+  private var countBound = cdIndexMap.getSize - 1
 
   def hasNext: Boolean = ( count < countBound )
   def next(): Int = {
@@ -177,12 +179,12 @@ class CDStorageIndexIterator( cdIndex: CDCoordIndex  ) extends CDIterator(cdInde
     count
   }
   def getCoordinateIndices: Array[Int] = { setCurrentCounter( count ); getCoordIndices }
-  def getIndex: Int =  count
+  def getIndex: StorageIndex =  count
   def initialize: Unit = {}
 }
 
 
-class CDIndexIterator1D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( cdIndex  ) {
+class CDIndexIterator1D( cdIndexMap: CDCoordIndexMap ) extends  CDArrayIndexIterator( cdIndexMap  ) {
   private var curr0: Int = coordIndices(0)
   private var stride0: Int = stride(0)
   private var shape0: Int = shape(0)
@@ -198,11 +200,11 @@ class CDIndexIterator1D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( 
     coordIndices.clone
   }
 
-  override def currentElement: Int = {
+  override def currentElement: StorageIndex = {
     offset + curr0 * stride0
   }
 
-  override def incr: Int = {
+  override def incr: StorageIndex = {
     if (({ curr0 += 1; curr0 }) >= shape0) curr0 = 0
     offset + curr0 * stride0
   }
@@ -223,9 +225,9 @@ class CDIndexIterator1D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( 
     this
   }
 
-  override def setCoordIndices(cdIndex: Array[Int]): CDIndexIterator1D = {
-    if (cdIndex.length != rank) throw new Exception()
-    set0(cdIndex(0))
+  override def setCoordIndices(cdIndexMap: Array[Int]): CDIndexIterator1D = {
+    if (cdIndexMap.length != rank) throw new Exception()
+    set0(cdIndexMap(0))
     this
   }
 
@@ -235,7 +237,7 @@ class CDIndexIterator1D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( 
   }
 }
 
-class CDIndexIterator2D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( cdIndex  ) {
+class CDIndexIterator2D( cdIndexMap: CDCoordIndexMap ) extends  CDArrayIndexIterator( cdIndexMap  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var stride0: Int = stride(0)
@@ -263,11 +265,11 @@ class CDIndexIterator2D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( 
     curr0 + "," + curr1
   }
 
-  override def currentElement: Int = {
+  override def currentElement: StorageIndex = {
     offset + curr0 * stride0 + curr1 * stride1
   }
 
-  override def incr: Int = {
+  override def incr: StorageIndex = {
     if (({ curr1 += 1; curr1 }) >= shape1) {
       curr1 = 0
       if (({ curr0 += 1; curr0 }) >= shape0) {
@@ -317,7 +319,7 @@ class CDIndexIterator2D( cdIndex: CDCoordIndex ) extends  CDArrayIndexIterator( 
 }
 
 
-class CDIndexIterator3D( index: CDCoordIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator3D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -352,7 +354,7 @@ class CDIndexIterator3D( index: CDCoordIndex ) extends  CDArrayIndexIterator( in
     curr0 + "," + curr1 + "," + curr2
   }
 
-  override def currentElement: Int = {
+  override def currentElement: StorageIndex = {
     offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2
   }
 
@@ -417,7 +419,7 @@ class CDIndexIterator3D( index: CDCoordIndex ) extends  CDArrayIndexIterator( in
   }
 }
 
-class CDIndexIterator4D( index: CDCoordIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator4D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -458,7 +460,7 @@ class CDIndexIterator4D( index: CDCoordIndex ) extends  CDArrayIndexIterator( in
     coordIndices.clone
   }
 
-  override def currentElement: Int = {
+  override def currentElement: StorageIndex = {
     offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3
   }
 
@@ -545,7 +547,7 @@ class CDIndexIterator4D( index: CDCoordIndex ) extends  CDArrayIndexIterator( in
 }
 
 
-class CDIndexIterator5D( index: CDCoordIndex ) extends  CDArrayIndexIterator( index  ) {
+class CDIndexIterator5D( index: CDCoordIndexMap ) extends  CDArrayIndexIterator( index  ) {
   private var curr0: Int = coordIndices(0)
   private var curr1: Int = coordIndices(1)
   private var curr2: Int = coordIndices(2)
@@ -594,7 +596,7 @@ class CDIndexIterator5D( index: CDCoordIndex ) extends  CDArrayIndexIterator( in
     coordIndices.clone
   }
 
-  override def currentElement: Int = {
+  override def currentElement: StorageIndex = {
     offset + curr0 * stride0 + curr1 * stride1 + curr2 * stride2 + +curr3 * stride3 + curr4 * stride4
   }
 
@@ -700,27 +702,26 @@ object DualArrayIterator {
       else if ( s1 == 1 ) s0
       else throw new Exception( "Attempt to combine incummensurate shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",") ) ) ).toArray
 
-    val cdIndex = CDCoordIndex.factory(shape)
+    val cdIndexMap = CDCoordIndexMap.factory(shape)
     val sameShape0 = input0.getShape.sameElements(shape)
     val sameShape1 = input1.getShape.sameElements(shape)
     val array0 = if(sameShape0) input0 else input0.broadcast(shape)
     val array1 = if(sameShape1) input1 else input1.broadcast(shape)
-    new DualArrayIterator( array0, array1, cdIndex )
+    new DualArrayIterator( array0, array1, cdIndexMap )
   }
 }
 
-class DualArrayIterator( val array0: CDFloatArray, val array1: CDFloatArray, cdIndex: CDCoordIndex ) extends CDArrayIndexIterator( cdIndex  ) {
+class DualArrayIterator( val array0: CDFloatArray, val array1: CDFloatArray, cdIndexMap: CDCoordIndexMap ) extends CDArrayIndexIterator( cdIndexMap  ) {
   val sameStructure0 = checkArrayStructure( 0 )
   val sameStructure1 = checkArrayStructure( 1 )
-  var storageIndex = 0
+  var storageIndex: StorageIndex = 0
 
   def checkArrayStructure( array_index: Int ): Boolean = {
     val _array = array_index match { case 0 => array0; case 1 => array1 }
-    assert(_array.getShape.sameElements(cdIndex.getShape), "Error, array has wrong shape in DualArrayIterator!")
-    _array.getStride.sameElements( cdIndex.getStride )
+    assert(_array.getShape.sameElements(cdIndexMap.getShape), "Error, array has wrong shape in DualArrayIterator!")
+    _array.getStride.sameElements( cdIndexMap.getStride )
   }
-  override def incr: Int = { storageIndex = super.incr; storageIndex }
-
+  override def incr: StorageIndex = { storageIndex = super.incr; storageIndex }
   def value0() = if(sameStructure0) array0.getStorageValue(storageIndex) else array0.getValue(coordIndices)
   def value1() = if(sameStructure1) array1.getStorageValue(storageIndex) else array1.getValue(coordIndices)
 

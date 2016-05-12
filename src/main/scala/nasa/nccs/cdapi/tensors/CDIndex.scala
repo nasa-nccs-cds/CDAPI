@@ -12,16 +12,16 @@ import ucar.nc2.time.CalendarPeriod.Field._
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
-object CDCoordIndex {
+object CDCoordIndexMap {
 
-  def factory(index: CDCoordIndex): CDCoordIndex = new CDCoordIndex(index.getShape, index.getStride, index.getOffset )
-  def factory(shape: Array[Int], stride: Array[Int]=Array.emptyIntArray, offset: Int = 0): CDCoordIndex = new CDCoordIndex(shape, stride, offset )
+  def factory(index: CDCoordIndexMap): CDCoordIndexMap = new CDCoordIndexMap(index.getShape, index.getStride, index.getOffset )
+  def factory(shape: Array[Int], stride: Array[Int]=Array.emptyIntArray, offset: Int = 0): CDCoordIndexMap = new CDCoordIndexMap(shape, stride, offset )
 }
 
-class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyIntArray, protected val offset: Int = 0 ) {
+class CDCoordIndexMap( protected val shape: Array[Int], _stride: Array[Int]=Array.emptyIntArray, protected val offset: Int = 0 ) {
   protected val rank: Int = shape.length
   protected val stride = if( _stride.isEmpty ) computeStrides(shape) else _stride
-  def this( index: CDCoordIndex ) = this( index.shape, index.stride, index.offset )
+  def this( index: CDCoordIndexMap ) = this( index.shape, index.stride, index.offset )
 
   def getRank: Int = rank
   def getShape: Array[Int] = shape.clone
@@ -67,18 +67,18 @@ class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.e
     return strides.reverse.toArray
   }
 
-  def flip(index: Int): CDCoordIndex = {
+  def flip(index: Int): CDCoordIndexMap = {
     assert ( (index >= 0) && (index < rank), "Illegal rank index: " +  index )
     val new_index = if (shape(index) >= 0) {
       val _offset = offset + stride(index) * (shape(index) - 1)
       val _stride = stride.clone
       _stride(index) = -stride(index)
-      new CDCoordIndex( shape, _stride, _offset )
-    } else new CDCoordIndex( this )
+      new CDCoordIndexMap( shape, _stride, _offset )
+    } else new CDCoordIndexMap( this )
     return new_index
   }
 
-  def section( ranges: List[ma2.Range] ): CDCoordIndex = {
+  def section( ranges: List[ma2.Range] ): CDCoordIndexMap = {
     assert(ranges.size == rank, "Bad ranges [] length")
     for( ii <-(0 until rank); r = ranges(ii); if ((r != null) && (r != ma2.Range.VLEN)) ) {
       assert ((r.first >= 0) && (r.first < shape(ii)), "Bad range starting value at index " + ii + " == " + r.first)
@@ -98,19 +98,19 @@ class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.e
         _offset += stride(ii) * r.first
       }
     }
-    CDCoordIndex.factory( _shape, _stride, _offset )
+    CDCoordIndexMap.factory( _shape, _stride, _offset )
   }
 
-  def reduce: CDCoordIndex = {
-    val c: CDCoordIndex = this
+  def reduce: CDCoordIndexMap = {
+    val c: CDCoordIndexMap = this
     for( ii <-(0 until rank); if (shape(ii) == 1) ) {
-        val newc: CDCoordIndex = c.reduce(ii)
+        val newc: CDCoordIndexMap = c.reduce(ii)
         return newc.reduce
     }
     return c
   }
 
-  def reduce(dim: Int): CDCoordIndex = {
+  def reduce(dim: Int): CDCoordIndexMap = {
     assert((dim >= 0) && (dim < rank), "illegal reduce dim " + dim )
     assert( (shape(dim) == 1), "illegal reduce dim " + dim + " : length != 1" )
     val _shape = ListBuffer[Int]()
@@ -119,10 +119,10 @@ class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.e
         _shape.append( shape(ii) )
         _stride.append( stride(ii) )
     }
-    CDCoordIndex.factory( _shape.toArray, _stride.toArray, offset )
+    CDCoordIndexMap.factory( _shape.toArray, _stride.toArray, offset )
   }
 
-  def transpose(index1: Int, index2: Int): CDCoordIndex = {
+  def transpose(index1: Int, index2: Int): CDCoordIndexMap = {
     assert((index1 >= 0) && (index1 < rank), "illegal index in transpose " + index1 )
     assert((index2 >= 0) && (index2 < rank), "illegal index in transpose " + index1 )
     val _shape = shape.clone()
@@ -131,10 +131,10 @@ class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.e
     _stride(index2) = stride(index1)
     _shape(index1) = shape(index2)
     _shape(index2) = shape(index1)
-    CDCoordIndex.factory( _shape, _stride, offset )
+    CDCoordIndexMap.factory( _shape, _stride, offset )
   }
 
-  def permute(dims: Array[Int]): CDCoordIndex = {
+  def permute(dims: Array[Int]): CDCoordIndexMap = {
     assert( (dims.length == shape.length), "illegal shape in permute " + dims )
     for (dim <- dims) if ((dim < 0) || (dim >= rank)) throw new Exception( "illegal shape in permute " + dims )
     val _shape = ListBuffer[Int]()
@@ -143,19 +143,19 @@ class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.e
       _stride.append( stride(dims(i) ) )
       _shape.append( shape(dims(i)) )
     }
-    CDCoordIndex.factory( _shape.toArray, _stride.toArray, offset )
+    CDCoordIndexMap.factory( _shape.toArray, _stride.toArray, offset )
   }
 
-  def broadcast(  dim: Int, size: Int ): CDCoordIndex = {
+  def broadcast(  dim: Int, size: Int ): CDCoordIndexMap = {
     assert( shape(dim) == 1, "Can't broadcast a dimension with size > 1" )
     val _shape = shape.clone()
     val _stride = stride.clone()
     _shape(dim) = size
     _stride(dim) = 0
-    CDCoordIndex.factory( _shape, _stride, offset )
+    CDCoordIndexMap.factory( _shape, _stride, offset )
   }
 
-  def broadcast( bcast_shape: Array[Int] ): CDCoordIndex = {
+  def broadcast( bcast_shape: Array[Int] ): CDCoordIndexMap = {
     assert ( bcast_shape.length == rank, "Can't broadcast shape (%s) to (%s)".format( shape.mkString(","), bcast_shape.mkString(",") ) )
     val _shape = shape.clone()
     val _stride = stride.clone()
@@ -164,7 +164,7 @@ class CDCoordIndex( protected val shape: Array[Int], _stride: Array[Int]=Array.e
       _shape(idim) = bsize
       _stride(idim) = 0
     }
-    CDCoordIndex.factory( _shape, _stride, offset )
+    CDCoordIndexMap.factory( _shape, _stride, offset )
   }
 
 }
