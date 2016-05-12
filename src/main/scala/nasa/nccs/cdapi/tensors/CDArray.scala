@@ -66,10 +66,10 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndex: CDCoordIndex, privat
   def getShape: Array[Int] = cdIndex.getShape
   def getStride: Array[Int] = cdIndex.getStride
   def getReducedShape: Array[Int] = cdIndex.getReducedShape
-  protected def getStorageValue( index: Int ): T = storage(index)
+  def getStorageValue( index: Int ): T = storage(index)
   def getValue( indices: Array[Int] ): T = storage( cdIndex.getStorageIndex(indices) )
   def getFlatValue( index: Int ): T = storage( getIterator.mapToSection(index) )
-  protected def setStorageValue( index: Int, value: T ): Unit = { storage(index) = value }
+  def setStorageValue( index: Int, value: T ): Unit = { storage(index) = value }
   def setValue( indices: Array[Int], value: T ): Unit = { storage( cdIndex.getStorageIndex(indices) ) = value }
   def setFlatValue( index: Int, value: T  ): Unit = storage( getIterator.mapToSection(index) ) = value
   def getSize: Int =  cdIndex.getSize
