@@ -421,7 +421,9 @@ object DomainAxis extends ContainerBase {
 }
 
 class DomainAxis( val axistype: DomainAxis.Type.Value, val start: GenericNumber, val end: GenericNumber, val system: String, val bounds: String = "" ) extends ContainerBase  {
+  import DomainAxis.Type._
   val name =   axistype.toString
+  def getCFAxisName(): String = axistype match { case Lat => "Y"; case Lon => "X"; case Lev => "Z"; case X => "X"; case Y => "Y"; case Z => "Z"; case T => "T" }
 
   override def toString = {
     s"DomainAxis { name = $name, start = $start, end = $end, system = $system, bounds = $bounds }"

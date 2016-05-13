@@ -112,7 +112,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   def getTimeIndexBounds( coordAxis: CoordinateAxis, startval: String, endval: String, strict: Boolean = true): ma2.Range = {
     val startIndex = getTimeCoordIndex( coordAxis, startval, BoundsRole.Start, strict)
     val endIndex = getTimeCoordIndex( coordAxis, endval, BoundsRole.End, strict)
-    new ma2.Range(startIndex, endIndex)
+    new ma2.Range( coordAxis.getAxisType.getCFAxisName, startIndex, endIndex)
   }
 
   def getNormalizedCoordinate(coordAxis: CoordinateAxis, cval: Double ): Double = coordAxis.getAxisType match {
@@ -177,7 +177,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
   def getGridIndexBounds(coordAxis: CoordinateAxis, startval: Double, endval: Double, strict: Boolean = true): ma2.Range = {
     val startIndex = getGridCoordIndex(coordAxis, startval, BoundsRole.Start, strict)
     val endIndex = getGridCoordIndex(coordAxis, endval, BoundsRole.End, strict)
-    new ma2.Range(startIndex, endIndex)
+    new ma2.Range( coordAxis.getAxisType.getCFAxisName, startIndex, endIndex )
   }
 
   def getIndexBounds( coordAxis: CoordinateAxis, startval: GenericNumber, endval: GenericNumber, strict: Boolean = true): ma2.Range = {
@@ -196,7 +196,7 @@ class CDSVariable( val name: String, val dataset: CDSDataset, val ncVariable: nc
             case dimension_index =>
               axis.system match {
                 case asys if asys.startsWith( "ind" ) =>
-                  shape.update(dimension_index, new ma2.Range(axis.start.toInt, axis.end.toInt, 1))
+                  shape.update(dimension_index, new ma2.Range( coordAxis.getAxisType.getCFAxisName, axis.start.toInt, axis.end.toInt, 1))
                 case asys if asys.startsWith( "val" ) =>
                   val boundedRange = getIndexBounds(coordAxis, axis.start, axis.end)
                   shape.update(dimension_index, boundedRange)
