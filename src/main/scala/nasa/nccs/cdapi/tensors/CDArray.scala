@@ -66,6 +66,7 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndexMap: CDIndexMap, priva
   def getRank: Int = rank
   def getShape: Array[Int] = cdIndexMap.getShape
   def getStride: Array[Int] = cdIndexMap.getStride
+  def getOffset: Int = cdIndexMap.getOffset
   def getReducedShape: Array[Int] = cdIndexMap.getReducedShape
   def getStorageValue( index: StorageIndex ): T = storage(index)
   def getValue( indices: Array[Int] ): T = storage( cdIndexMap.getStorageIndex(indices) )
@@ -82,6 +83,10 @@ abstract class CDArray[ T <: AnyVal ]( private val cdIndexMap: CDIndexMap, priva
   def section(ranges: List[ma2.Range]): CDArray[T] = createView(cdIndexMap.section(ranges))
   def valid( value: T ): Boolean
   def spawn( shape: Array[Int], fillval: T ): CDArray[T]
+  def sameShape( cdIndex: CDIndexMap ): Boolean = cdIndexMap.getShape.sameElements( cdIndex.getShape )
+  def sameStorage( cdIndex: CDIndexMap ): Boolean = ( cdIndexMap.getStride.sameElements( cdIndex.getStride ) && ( cdIndexMap.getOffset == cdIndex.getOffset ) )
+  def sameShape[R <: AnyVal]( array: CDArray[R] ): Boolean = sameShape( array.getIndex )
+  def sameStorage[R <: AnyVal]( array: CDArray[R] ): Boolean = sameStorage( array.getIndex )
 
   def getAccumulatorArray( reduceAxes: Array[Int], fillval: T, fullShape: Array[Int] = getShape ): CDArray[T] = {
     val reducedShape = for( idim <- ( 0 until rank) ) yield if( reduceAxes.contains(idim) ) 1 else fullShape( idim )

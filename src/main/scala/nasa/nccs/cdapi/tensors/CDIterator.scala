@@ -712,18 +712,18 @@ object DualArrayIterator {
 }
 
 class DualArrayIterator( val array0: CDFloatArray, val array1: CDFloatArray, cdIndexMap: CDIndexMap ) extends CDArrayIndexIterator( cdIndexMap  ) {
-  val sameStructure0 = checkArrayStructure( 0 )
-  val sameStructure1 = checkArrayStructure( 1 )
+  val sameStorage0 = checkArrayStructure( 0 )
+  val sameStorage1 = checkArrayStructure( 1 )
   var storageIndex: StorageIndex = 0
 
   def checkArrayStructure( array_index: Int ): Boolean = {
     val _array = array_index match { case 0 => array0; case 1 => array1 }
-    assert(_array.getShape.sameElements(cdIndexMap.getShape), "Error, array has wrong shape in DualArrayIterator!")
-    _array.getStride.sameElements( cdIndexMap.getStride )
+    assert(_array.sameShape(cdIndexMap), "Error, array has wrong shape in DualArrayIterator!")
+    _array.sameStorage( cdIndexMap )
   }
   override def incr: StorageIndex = { storageIndex = super.incr; storageIndex }
-  def value0() = if(sameStructure0) array0.getStorageValue(storageIndex) else array0.getValue(coordIndices)
-  def value1() = if(sameStructure1) array1.getStorageValue(storageIndex) else array1.getValue(coordIndices)
+  def value0 = if(sameStorage0) array0.getStorageValue(storageIndex) else array0.getValue(coordIndices)
+  def value1 = if(sameStorage1) array1.getStorageValue(storageIndex) else array1.getValue(coordIndices)
 
 }
 
