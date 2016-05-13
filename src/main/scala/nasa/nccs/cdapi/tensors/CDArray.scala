@@ -208,7 +208,6 @@ object CDFloatArray {
   }
 
   def combine( reductionOp: ReduceOpFlt, input0: CDFloatArray, input1: CDFloatArray ): CDFloatArray = {
-    assert( input0.getShape.sameElements(input1.getShape), "Can't combine arrays with different shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",")))
     val sameStructure = input0.getStride.sameElements(input1.getStride)
     val iter = DualArrayIterator(input0,input1)
     val result = for (flatIndex <- iter; v0 = iter.value0; v1 = iter.value1 ) yield
@@ -217,7 +216,6 @@ object CDFloatArray {
   }
 
   def accumulate( reductionOp: ReduceOpFlt, input0: CDFloatArray, input1: CDFloatArray ): Unit = {
-    assert( input0.getShape.sameElements(input1.getShape), "Can't combine arrays with different shapes: (%s) vs (%s)".format( input0.getShape.mkString(","), input1.getShape.mkString(",")))
     val sameStructure = input0.getStride.sameElements(input1.getStride)
     val iter = DualArrayIterator(input0,input1)
     for (flatIndex <- iter;  v0 = iter.value0; if (input0.valid(v0)); v1 = iter.value1; if (input1.valid(v1))) {
@@ -332,8 +330,7 @@ class CDFloatArray( cdIndexMap: CDIndexMap, storage: Array[Float], protected val
   }
 
   def anomaly( reduceDims: Array[Int], weightsOpt: Option[CDFloatArray] = None ): CDFloatArray = {
-    val meanval: CDFloatArray = mean( reduceDims, weightsOpt )
-    this - meanval.broadcast( getShape )
+    this - mean( reduceDims, weightsOpt )
   }
 
   def flat_array_square_profile(): CDFloatArray = {
