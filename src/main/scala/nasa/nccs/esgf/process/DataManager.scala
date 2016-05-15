@@ -26,7 +26,7 @@ trait ScopeContext {
   def config( key: String ): Option[String] = getConfiguration.get(key)
 }
 
-class RequestContext( val domains: Map[String,DomainContainer], val inputs: Map[String, OperationInputSpec], private val configuration: Map[String,String] ) extends ScopeContext {
+class RequestContext( val domains: Map[String,DomainContainer], val inputs: Map[String, OperationInputSpec], val targetGrid: TargetGrid, private val configuration: Map[String,String] ) extends ScopeContext {
   def getConfiguration = configuration
   def missing_variable(uid: String) = throw new Exception("Can't find Variable '%s' in uids: [ %s ]".format(uid, inputs.keySet.mkString(", ")))
   def getDataSources: Map[String, OperationInputSpec] = inputs
@@ -56,6 +56,10 @@ case class OperationInputSpec( data: DataFragmentSpec, axes: AxisIndices ) {
   def getRange( dimension_name: String ): Option[ma2.Range] = data.getRange( dimension_name )
 }
 
+class TargetGrid( val variable: OperationInputSpec ) {
+
+}
+
 class ServerContext( val dataLoader: DataLoader, private val configuration: Map[String,String] )  extends ScopeContext {
   val logger = org.slf4j.LoggerFactory.getLogger(this.getClass)
   def getConfiguration = configuration
@@ -72,6 +76,9 @@ class ServerContext( val dataLoader: DataLoader, private val configuration: Map[
     ( axisIndex -> coordAxis.read( List(range) ) )
   }
 
+  def createTargetGrid( inputSpec: OperationInputSpec ) = {
+    new TargetGrid(inputSpec)
+  }
 
   def getDataset(collection: String, varname: String ): CDSDataset = dataLoader.getDataset( collection, varname )
 

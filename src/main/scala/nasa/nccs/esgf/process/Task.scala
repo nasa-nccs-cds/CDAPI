@@ -25,7 +25,7 @@ case class ErrorReport(severity: String, message: String) {
   }
 }
 
-class TaskRequest(val name: String, val variableMap : Map[String,DataContainer], val domainMap: Map[String,DomainContainer], val workflows: List[WorkflowContainer] = List() ) {
+class TaskRequest(val name: String, val variableMap : Map[String,DataContainer], val domainMap: Map[String,DomainContainer], val workflows: List[WorkflowContainer] = List(), val targetGridSpec: Map[String,String] ) {
   val errorReports = new ListBuffer[ErrorReport]()
   val logger = LoggerFactory.getLogger( this.getClass )
   validate()
@@ -97,19 +97,19 @@ object TaskRequest {
   val logger = LoggerFactory.getLogger( this.getClass )
   def apply(process_name: String, datainputs: Map[String, Seq[Map[String, Any]]]) = {
     logger.info( "TaskRequest--> process_name: %s, datainputs: %s".format( process_name, datainputs.toString ) )
-    val data_list = datainputs.getOrElse("variable", List() ).map(DataContainer(_)).toList
-    val domain_list = datainputs.getOrElse("domain", List()).map(DomainContainer(_)).toList
-    val operation_list = datainputs.getOrElse("operation", List(Map("unparsed"->"()"))).map(WorkflowContainer(process_name,_)).toList
+    val data_list: List[DataContainer] = datainputs.getOrElse("variable", List() ).map(DataContainer(_)).toList
+    val domain_list: List[DomainContainer] = datainputs.getOrElse("domain", List()).map(DomainContainer(_)).toList
+    val operation_list: List[WorkflowContainer] = datainputs.getOrElse("operation", List(Map("unparsed"->"()"))).map(WorkflowContainer(process_name,_)).toList
     val variableMap = buildVarMap( data_list, operation_list )
     val domainMap = buildDomainMap( domain_list )
-    new TaskRequest( process_name, variableMap, domainMap, operation_list )
+    val gridSpec: Map[String,String] = Map( "id" -> datainputs.getOrElse("grid", data_list.head.uid ).toString )
+    new TaskRequest( process_name, variableMap, domainMap, operation_list, gridSpec )
   }
 
   def buildVarMap( data: List[DataContainer], workflow: List[WorkflowContainer] ): Map[String,DataContainer] = {
-    var var_items = new ListBuffer[(String,DataContainer)]()
-    for( data_container <- data ) var_items += ( data_container.uid -> data_container )
-    for( workflow_container<- workflow; operation<-workflow_container.operations; if !operation.result.isEmpty ) var_items += ( operation.result -> DataContainer(operation) )
-    val var_map = var_items.toMap[String,DataContainer]
+    var data_var_items = for( data_container <- data ) yield ( data_container.uid -> data_container )
+    var op_var_items = for( workflow_container<- workflow; operation<-workflow_container.operations; if !operation.result.isEmpty ) yield ( operation.result -> DataContainer(operation) )
+    val var_map = Map( op_var_items ++ data_var_items: _* )
     logger.info( "Created Variable Map: " + var_map.toString )
     for( workflow_container<- workflow; operation<-workflow_container.operations; vid<-operation.inputs; if(!vid.isEmpty)  ) var_map.get( vid ) match {
       case Some(data_container) => data_container.addOpSpec( operation )
